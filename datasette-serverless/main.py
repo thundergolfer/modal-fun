@@ -11,6 +11,7 @@ stub = modal.Stub("modal-datasette-covid")
 CACHE_DIR = "/cache"
 REPO_DIR = pathlib.Path(CACHE_DIR, "COVID-19")
 DB_DIR = pathlib.Path(CACHE_DIR, "sqlitedb-files")
+DB_PATH = pathlib.Path(DB_DIR, "covid.db")
 
 datasette_image = (
     modal.DebianSlim()
@@ -97,7 +98,7 @@ def prep_db():
 
     DB_DIR.mkdir(parents=True, exist_ok=True)
 
-    db = sqlite_utils.Database(str(DB_DIR / "covid.db"))
+    db = sqlite_utils.Database(str(DB_PATH))
 
     # Load John Hopkins CSSE daily reports
     table = db["johns_hopkins_csse_daily_reports"]
@@ -121,7 +122,7 @@ def prep_db():
 def app():
     from datasette.app import Datasette
 
-    return Datasette(files=[str(DB_DIR / "covid.db")]).app()
+    return Datasette(files=[DB_PATH]).app()
 
 
 if __name__ == "__main__":
