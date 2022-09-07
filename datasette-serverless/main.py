@@ -37,9 +37,7 @@ def load_report(filepath):
                 or row.get("Province_State")
                 or None
             )
-            country_or_region = row.get("Country_Region") or row.get(
-                "Country/Region"
-            )
+            country_or_region = row.get("Country_Region") or row.get("Country/Region")
             yield {
                 "day": day,
                 "country_or_region": country_or_region.strip()
@@ -56,9 +54,7 @@ def load_report(filepath):
                 "active": int(row["Active"]) if row.get("Active") else None,
                 "latitude": row.get("Latitude") or row.get("Lat") or None,
                 "longitude": row.get("Longitude") or row.get("Long_") or None,
-                "last_update": row.get("Last Update")
-                or row.get("Last_Update")
-                or None,
+                "last_update": row.get("Last Update") or row.get("Last_Update") or None,
                 "combined_key": row.get("Combined_Key") or None,
             }
 
@@ -124,6 +120,7 @@ def prep_db():
 )
 def app():
     from datasette.app import Datasette
+
     return Datasette(files=[str(DB_DIR / "covid.db")]).app()
 
 
