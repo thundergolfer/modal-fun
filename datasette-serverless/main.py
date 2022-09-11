@@ -1,19 +1,17 @@
+import argparse
 import csv
+import enum
 import itertools
 import os
 import pathlib
+import sys
 from datetime import datetime, timezone
+from typing import Any, NamedTuple
 
 import modal
 
 volume = modal.SharedVolume().persist("dataset-cache-vol")
 stub = modal.Stub("modal-datasette-covid")
-
-CACHE_DIR = "/cache"
-REPO_DIR = pathlib.Path(CACHE_DIR, "COVID-19")
-DB_DIR = pathlib.Path(CACHE_DIR, "sqlitedb-files")
-DB_PATH = pathlib.Path(DB_DIR, "covid.db")
-
 datasette_image = (
     modal.DebianSlim()
     .pip_install(
@@ -25,6 +23,21 @@ datasette_image = (
     )
     .apt_install(["git"])
 )
+
+CACHE_DIR = "/cache"
+REPO_DIR = pathlib.Path(CACHE_DIR, "COVID-19")
+DB_DIR = pathlib.Path(CACHE_DIR, "sqlitedb-files")
+DB_PATH = pathlib.Path(DB_DIR, "covid.db")
+
+
+class Subcommand(enum.Enum):
+    QUERY = "query"
+    PREP = "prep"
+
+
+class Command(NamedTuple):
+    subcommand: Subcommand
+    args: Any
 
 
 def utc_now() -> datetime:
@@ -128,6 +141,18 @@ def prep_db():
     print("DB prepared!")
 
 
+@stub.function(
+    image=datasette_image,
+    shared_volumes={CACHE_DIR: volume},
+)
+def query_db(query):
+    import sqlite3
+
+    con = sqlite3.connect(DB_PATH)
+    for row in con.execute(query):
+        print(row)
+
+
 @stub.asgi(
     image=datasette_image,
     shared_volumes={CACHE_DIR: volume},
@@ -138,9 +163,36 @@ def app():
     return Datasette(files=[DB_PATH]).app()
 
 
-if __name__ == "__main__":
-    with stub.run():
-        download_dataset()
-        prep_db()
+def parse_args() -> Command:
+    parser = argparse.ArgumentParser(prog="datasette-serverless-covid19")
+    subparsers = parser.add_subparsers(
+        dest="subparser_name", help="Application subcommands."
+    )
 
-    stub.serve()
+    query_subparser = subparsers.add_parser(
+        Subcommand.QUERY.value, help="Run a query remotely, against the SQLite DB."
+    )
+    query_subparser.add_argument("--sql", type=str, help="SQLite query.", required=True)
+
+    subparsers.add_parser(
+        Subcommand.PREP.value, help="Download dataset and seed SQLite DB."
+    )
+
+    args = parser.parse_args(sys.argv[1:])
+    return Command(
+        subcommand=Subcommand[args.subparser_name.upper()],
+        args=args,
+    )
+
+
+if __name__ == "__main__":
+    cmd = parse_args()
+
+    with stub.run():
+        if cmd.subcommand == Subcommand.QUERY:
+            query_db(cmd.args.sql)
+        elif cmd.subcommand == Subcommand.PREP:
+            download_dataset()
+            prep_db()
+        else:
+            raise AssertionError(f"{cmd.subcommand} subparse not valid.")
