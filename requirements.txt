@@ -1,0 +1,4 @@
+https://modal.com/api/client-library/us-JG7gT3uZg73JH8TD3RIGmJ/modal-0.0.30-py3-none-any.whl
+httpx==0.23.0
+pytz==2022.2.1
+sqlite-utils==3.29
