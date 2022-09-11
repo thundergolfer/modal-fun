@@ -94,6 +94,7 @@ def load_daily_reports():
     shared_volumes={CACHE_DIR: volume},
 )
 def download_dataset(force=False):
+    """Shallow clone Git repository to get COVID-19 data from Johns Hopkins."""
     import git
 
     if REPO_DIR.exists():
@@ -108,6 +109,7 @@ def download_dataset(force=False):
 
 @stub.function(schedule=modal.Period(hours=1))
 def refresh_db():
+    """A Modal scheduled function that's (re)created on every `modal app deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
     download_dataset(force=True)
     prep_db()
@@ -118,6 +120,7 @@ def refresh_db():
     shared_volumes={CACHE_DIR: volume},
 )
 def prep_db():
+    """Creates a fresh SQLite table with sensible indexes to support queries run from Datasette web UI."""
     print("Prepping sqlite DB...")
     import sqlite_utils
     from sqlite_utils.db import DescIndex
@@ -146,6 +149,10 @@ def prep_db():
     shared_volumes={CACHE_DIR: volume},
 )
 def query_db(query):
+    """
+    Connect to database stored in Modal shared volume and run a query against it.
+    Mostly useful for admin and diagnostics.
+    """
     import sqlite3
 
     con = sqlite3.connect(DB_PATH)
@@ -158,6 +165,7 @@ def query_db(query):
     shared_volumes={CACHE_DIR: volume},
 )
 def app():
+    """Returns the Datasette app's ASGI web application object, so that Modal can you it to serve a webhook."""
     from datasette.app import Datasette
 
     return Datasette(files=[DB_PATH]).app()
