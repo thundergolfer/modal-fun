@@ -2,6 +2,7 @@ import csv
 import itertools
 import os
 import pathlib
+from datetime import datetime, timezone
 
 import modal
 
@@ -24,6 +25,10 @@ datasette_image = (
     )
     .apt_install(["git"])
 )
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def load_report(filepath):
@@ -75,14 +80,24 @@ def load_daily_reports():
     image=datasette_image,
     shared_volumes={CACHE_DIR: volume},
 )
-def download_dataset():
+def download_dataset(force=False):
     import git
 
     if REPO_DIR.exists():
-        print("Clone already done. Skipping...")
-        return
+        if not force:
+            print("Clone already done. Skipping...")
+            return
+        else:
+            print("Refreshing cloned repo.")
     git_url = "https://github.com/CSSEGISandData/COVID-19"
     git.Repo.clone_from(git_url, repo_dir, depth=1)
+
+
+@stub.function(schedule=modal.Period(hours=1))
+def refresh_db():
+    print(f"Running scheduled refresh at {utc_now()}")
+    download_dataset(force=True)
+    prep_db()
 
 
 @stub.function(
@@ -91,8 +106,6 @@ def download_dataset():
 )
 def prep_db():
     print("Prepping sqlite DB...")
-
-    import datasette
     import sqlite_utils
     from sqlite_utils.db import DescIndex
 
