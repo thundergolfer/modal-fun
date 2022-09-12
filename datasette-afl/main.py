@@ -18,14 +18,16 @@ from typing import Any, NamedTuple
 import httpx
 import pytz
 import sqlite_utils
+from loguru import logger
 
 import modal
 
-stub = modal.Stub("modal-datasette-afl")
 
-logging_format_str = "%(asctime)s %(levelname)s %(message)s"
-logging.basicConfig(format=logging_format_str)
-logging.getLogger().setLevel(logging.DEBUG)
+app_image = modal.DebianSlim().pip_install(
+    ["httpx==0.23.0", "pytz==2022.2.1", "sqlite-utils==3.29", "loguru==0.6.0"]
+)
+stub = modal.Stub("modal-datasette-afl", image=app_image)
+
 
 DB_DIR = pathlib.Path(".")
 DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,7 +100,7 @@ def is_afl_active() -> bool:
 
 
 def load_all_games(table):
-    logging.info("Loading all AFL games into DB...")
+    logger.info("Loading all AFL games into DB...")
     # TODO(Jonathon): Find out why Squiggle API doesn't have game data before 2000.
     for year in range(2000, 2024):
         if table.exists():
@@ -106,16 +108,14 @@ def load_all_games(table):
                 f"SELECT COUNT(*) FROM {table.name} WHERE year = {year}"
             ).fetchone()[0]
             if row_count > 120:
-                logging.info(
-                    f"Not loading {year} games from API. Already loaded in DB."
-                )
+                logger.info(f"Not loading {year} games from API. Already loaded in DB.")
                 continue  # Probably loaded this year's games into DB already.
         games = SquiggleAPI.games(year)
         table.insert_all(games)
 
 
 def load_all_teams(table):
-    logging.info("Loading all AFL teams into DB...")
+    logger.info("Loading all AFL teams into DB...")
     teams = SquiggleAPI.teams()
     table.insert_all(teams)
 
@@ -125,7 +125,7 @@ def load_all_standings(table):
     # The number of rounds per year is not regular.
     # COVID-19 affected seasons, and introduction of new teams
     # expanded the number of rounds.
-    logging.info("Loading all AFL standings into DB...")
+    logger.info("Loading all AFL standings into DB...")
     num_rounds_in_year = [
         (2000, 22),
         (2001, 22),
@@ -153,14 +153,14 @@ def load_all_standings(table):
         (2023, 23),
     ]
     for year, num_rounds in num_rounds_in_year:
-        logging.info(f"Processing standings for {year}")
+        logger.info(f"Processing standings for {year}")
         if table.exists():
             row_count = query_db(
                 f"SELECT COUNT(*) FROM {table.name} WHERE year = {year}"
             ).fetchone()[0]
             # Probably loaded this year's standings into DB already.
             if row_count > 300:
-                logging.info(
+                logger.info(
                     f"Not loading {year} standings from API. Already loaded in DB."
                 )
                 continue
@@ -171,7 +171,7 @@ def load_all_standings(table):
 
 def prep_db(clean=False):
     """Creates a fresh SQLite table with sensible indexes to support queries run from Datasette web UI."""
-    logging.info("Prepping sqlite DB...")
+    logger.info("Prepping sqlite DB...")
     import sqlite_utils
     from sqlite_utils.db import DescIndex
 
@@ -237,14 +237,14 @@ def parse_args() -> Command:
 @stub.function(schedule=modal.Period(days=1))
 def refresh_db():
     if not is_afl_active():
-        logging.info(
+        logger.info(
             "It's the AFL off-season! No new data is being produced, so there's nothing to do."
         )
         return
-    logging.info(
+    logger.info(
         "Within range of dates where AFL is active. Attempting to refresh with new data."
     )
-    logging.warning("TODO(Jonathon): Data refresh not yet implemented!")
+    logger.warning("TODO(Jonathon): Data refresh not yet implemented!")
 
 
 if __name__ == "__main__":
