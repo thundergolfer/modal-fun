@@ -19,6 +19,10 @@ import httpx
 import pytz
 import sqlite_utils
 
+import modal
+
+stub = modal.Stub("modal-datasette-afl")
+
 logging_format_str = "%(asctime)s %(levelname)s %(message)s"
 logging.basicConfig(format=logging_format_str)
 logging.getLogger().setLevel(logging.DEBUG)
@@ -73,6 +77,24 @@ class SquiggleAPI:
             standing["year"] = year
             standing["round"] = round
             yield standing
+
+
+def is_afl_active() -> bool:
+    """
+    Determine whether new stats could be available, based on a rough range of dates
+    where it's possible AFL is active.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    # AFL has always only been played between these dates. Even during the COVID-19 disrupted season.
+    first_march = datetime.datetime(
+        year=now.year, month=3, day=1, tzinfo=datetime.timezone.utc
+    )
+    first_november = datetime.datetime(
+        year=now.year, month=11, day=1, tzinfo=datetime.timezone.utc
+    )
+    if first_march <= now <= first_november:
+        return True
+    return False
 
 
 def load_all_games(table):
@@ -210,6 +232,19 @@ def parse_args() -> Command:
         subcommand=Subcommand[args.subcommand.upper()],
         args=args,
     )
+
+
+@stub.function(schedule=modal.Period(days=1))
+def refresh_db():
+    if not is_afl_active():
+        logging.info(
+            "It's the AFL off-season! No new data is being produced, so there's nothing to do."
+        )
+        return
+    logging.info(
+        "Within range of dates where AFL is active. Attempting to refresh with new data."
+    )
+    logging.warning("TODO(Jonathon): Data refresh not yet implemented!")
 
 
 if __name__ == "__main__":
