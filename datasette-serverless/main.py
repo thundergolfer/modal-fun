@@ -4,6 +4,7 @@ import enum
 import itertools
 import os
 import pathlib
+import shutil
 import sys
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
@@ -103,8 +104,10 @@ def download_dataset(force=False):
             return
         else:
             print("Refreshing cloned repo.")
+            shutil.rmtree(REPO_DIR)
+
     git_url = "https://github.com/CSSEGISandData/COVID-19"
-    git.Repo.clone_from(git_url, repo_dir, depth=1)
+    git.Repo.clone_from(git_url, REPO_DIR, depth=1)
 
 
 @stub.function(schedule=modal.Period(hours=1))
