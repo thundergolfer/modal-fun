@@ -28,7 +28,7 @@ datasette_image = (
 CACHE_DIR = "/cache"
 REPO_DIR = pathlib.Path(CACHE_DIR, "COVID-19")
 DB_DIR = pathlib.Path(CACHE_DIR, "sqlitedb-files")
-DB_PATH = pathlib.Path(DB_DIR, "covid.db")
+DB_PATH = pathlib.Path(DB_DIR, "covid-19.db")
 
 
 class Subcommand(enum.Enum):
@@ -43,6 +43,11 @@ class Command(NamedTuple):
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def chunks(it, size):
+    it = iter(it)
+    return iter(lambda: tuple(itertools.islice(it, size)), ())
 
 
 def load_report(filepath):
@@ -66,16 +71,11 @@ def load_report(filepath):
                 "province_or_state": province_or_state.strip()
                 if province_or_state
                 else None,
-                "admin2": row.get("Admin2") or None,
-                "fips": row.get("FIPS", "").strip() or None,
                 "confirmed": int(float(row["Confirmed"] or 0)),
                 "deaths": int(float(row["Deaths"] or 0)),
                 "recovered": int(float(row["Recovered"] or 0)),
                 "active": int(row["Active"]) if row.get("Active") else None,
-                "latitude": row.get("Latitude") or row.get("Lat") or None,
-                "longitude": row.get("Longitude") or row.get("Long_") or None,
                 "last_update": row.get("Last Update") or row.get("Last_Update") or None,
-                "combined_key": row.get("Combined_Key") or None,
             }
 
 
@@ -110,7 +110,7 @@ def download_dataset(force=False):
     git.Repo.clone_from(git_url, REPO_DIR, depth=1)
 
 
-@stub.function(schedule=modal.Period(hours=1))
+@stub.function(schedule=modal.Period(hours=6))
 def refresh_db():
     """A Modal scheduled function that's (re)created on every `modal app deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
@@ -122,7 +122,7 @@ def refresh_db():
     image=datasette_image,
     shared_volumes={CACHE_DIR: volume},
 )
-def prep_db():
+def prep_db(max_records=None):
     """Creates a fresh SQLite table with sensible indexes to support queries run from Datasette web UI."""
     print("Prepping sqlite DB...")
     import sqlite_utils
@@ -137,13 +137,16 @@ def prep_db():
     if table.exists():
         table.drop()
     print("Loading daily reports...")
-    # Do subset of records to speed up processing
-    records = itertools.islice(load_daily_reports(), 10_000)
-    table.insert_all(records)
+    records = load_daily_reports()
+    if max_records:
+        records = itertools.islice(load_daily_reports(), max_records)
+    batch_size = 100_000
+    for batch in chunks(records, size=batch_size):
+        table.insert_all(batch, batch_size=batch_size, truncate=True)
+        print(f"Inserted {len(batch)} rows into DB.")
     table.create_index(["day"], if_not_exists=True)
     table.create_index(["province_or_state"], if_not_exists=True)
     table.create_index(["country_or_region"], if_not_exists=True)
-    table.create_index(["combined_key"], if_not_exists=True)
     print("DB prepared!")
 
 
@@ -170,14 +173,14 @@ def query_db(query):
 def app():
     """Returns the Datasette app's ASGI web application object, so that Modal can you it to serve a webhook."""
     from datasette.app import Datasette
-
     return Datasette(files=[DB_PATH]).app()
 
 
 def parse_args() -> Command:
     parser = argparse.ArgumentParser(prog="datasette-serverless-covid19")
     subparsers = parser.add_subparsers(
-        dest="subparser_name", help="Application subcommands."
+        dest="subcommand", help="Application subcommands.",
+        required=True,
     )
 
     query_subparser = subparsers.add_parser(
@@ -191,7 +194,7 @@ def parse_args() -> Command:
 
     args = parser.parse_args(sys.argv[1:])
     return Command(
-        subcommand=Subcommand[args.subparser_name.upper()],
+        subcommand=Subcommand[args.subcommand.upper()],
         args=args,
     )
 
@@ -204,6 +207,6 @@ if __name__ == "__main__":
             query_db(cmd.args.sql)
         elif cmd.subcommand == Subcommand.PREP:
             download_dataset()
-            prep_db()
+            prep_db(max_records=100_000)
         else:
             raise AssertionError(f"{cmd.subcommand} subparse not valid.")
