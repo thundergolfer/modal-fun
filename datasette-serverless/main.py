@@ -2,7 +2,6 @@ import argparse
 import csv
 import enum
 import itertools
-import os
 import pathlib
 import shutil
 import sys
@@ -27,8 +26,7 @@ datasette_image = (
 
 CACHE_DIR = "/cache"
 REPO_DIR = pathlib.Path(CACHE_DIR, "COVID-19")
-DB_DIR = pathlib.Path(CACHE_DIR, "sqlitedb-files")
-DB_PATH = pathlib.Path(DB_DIR, "covid-19.db")
+DB_PATH = pathlib.Path(CACHE_DIR, "covid-19.db")
 
 
 class Subcommand(enum.Enum):
@@ -50,12 +48,20 @@ def chunks(it, size):
     return iter(lambda: tuple(itertools.islice(it, size)), ())
 
 
+def load_daily_reports():
+    jhu_csse_base = REPO_DIR
+    reports_path = jhu_csse_base / "csse_covid_19_data" / "csse_covid_19_daily_reports"
+    daily_reports = list(reports_path.glob("*.csv"))
+    for filepath in daily_reports:
+        yield from load_report(filepath)
+
+
 def load_report(filepath):
+    import csv
+
     mm, dd, yyyy = filepath.stem.split("-")
-    day = f"{yyyy}-{mm}-{dd}"
     with filepath.open() as fp:
         for row in csv.DictReader(fp):
-            # Weirdly, this column is sometimes \ufeffProvince/State
             province_or_state = (
                 row.get("\ufeffProvince/State")
                 or row.get("Province/State")
@@ -64,7 +70,7 @@ def load_report(filepath):
             )
             country_or_region = row.get("Country_Region") or row.get("Country/Region")
             yield {
-                "day": day,
+                "day": f"{yyyy}-{mm}-{dd}",
                 "country_or_region": country_or_region.strip()
                 if country_or_region
                 else None,
@@ -77,17 +83,6 @@ def load_report(filepath):
                 "active": int(row["Active"]) if row.get("Active") else None,
                 "last_update": row.get("Last Update") or row.get("Last_Update") or None,
             }
-
-
-def load_daily_reports():
-    jhu_csse_base = REPO_DIR
-    daily_reports = list(
-        (jhu_csse_base / "csse_covid_19_data" / "csse_covid_19_daily_reports").glob(
-            "*.csv"
-        )
-    )
-    for filepath in daily_reports:
-        yield from load_report(filepath)
 
 
 @stub.function(
@@ -110,7 +105,7 @@ def download_dataset(force=False):
     git.Repo.clone_from(git_url, REPO_DIR, depth=1)
 
 
-@stub.function(schedule=modal.Period(hours=6))
+@stub.function(schedule=modal.Period(hours=12))
 def refresh_db():
     """A Modal scheduled function that's (re)created on every `modal app deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
@@ -122,32 +117,31 @@ def refresh_db():
     image=datasette_image,
     shared_volumes={CACHE_DIR: volume},
 )
-def prep_db(max_records=None):
-    """Creates a fresh SQLite table with sensible indexes to support queries run from Datasette web UI."""
-    print("Prepping sqlite DB...")
+def prep_db():
+    import shutil
+    import tempfile
     import sqlite_utils
-    from sqlite_utils.db import DescIndex
 
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-
-    db = sqlite_utils.Database(str(DB_PATH))
-
-    # Load John Hopkins CSSE daily reports
-    table = db["johns_hopkins_csse_daily_reports"]
-    if table.exists():
-        table.drop()
     print("Loading daily reports...")
     records = load_daily_reports()
-    if max_records:
-        records = itertools.islice(load_daily_reports(), max_records)
-    batch_size = 100_000
-    for batch in chunks(records, size=batch_size):
-        table.insert_all(batch, batch_size=batch_size, truncate=True)
-        print(f"Inserted {len(batch)} rows into DB.")
-    table.create_index(["day"], if_not_exists=True)
-    table.create_index(["province_or_state"], if_not_exists=True)
-    table.create_index(["country_or_region"], if_not_exists=True)
-    print("DB prepared!")
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        db = sqlite_utils.Database(tmp.name)
+        table = db["johns_hopkins_csse_daily_reports"]
+
+        batch_size = 100_000
+        for i, batch in enumerate(chunks(records, size=batch_size)):
+            truncate = True if i == 0 else False
+            table.insert_all(batch, batch_size=batch_size, truncate=truncate)
+            print(f"Inserted {len(batch)} rows into DB.")
+
+        table.create_index(["day"], if_not_exists=True)
+        table.create_index(["province_or_state"], if_not_exists=True)
+        table.create_index(["country_or_region"], if_not_exists=True)
+
+        print("Syncing DB with shared volume.")
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(tmp.name, DB_PATH)
 
 
 @stub.function(
@@ -173,13 +167,15 @@ def query_db(query):
 def app():
     """Returns the Datasette app's ASGI web application object, so that Modal can you it to serve a webhook."""
     from datasette.app import Datasette
+
     return Datasette(files=[DB_PATH]).app()
 
 
 def parse_args() -> Command:
     parser = argparse.ArgumentParser(prog="datasette-serverless-covid19")
     subparsers = parser.add_subparsers(
-        dest="subcommand", help="Application subcommands.",
+        dest="subcommand",
+        help="Application subcommands.",
         required=True,
     )
 
@@ -207,6 +203,6 @@ if __name__ == "__main__":
             query_db(cmd.args.sql)
         elif cmd.subcommand == Subcommand.PREP:
             download_dataset()
-            prep_db(max_records=100_000)
+            prep_db()
         else:
             raise AssertionError(f"{cmd.subcommand} subparse not valid.")
