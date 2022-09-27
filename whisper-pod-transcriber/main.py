@@ -2,128 +2,379 @@
 whisper-pod-transcriber uses OpenAI's Whisper modal to do speech-to-text transcription
 of podcasts.
 """
+import datetime
+from dataclasses import dataclass
+import dataclasses
+import json
 import os
+import pathlib
+from re import M
+import sys
 
 from typing import Any, NamedTuple
 
-from loguru import logger
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 
 import modal
 
 import podcast
+import search
 
 
-app_image = modal.DebianSlim().pip_install(
-    [
-        "https://github.com/openai/whisper/archive/5d8d3e75a4826fe5f01205d81c3017a805fc2bf9.tar.gz",
-        "jiwer",
-        "gql[all]~=3.0.0a5",
-        "pandas",
-        "loguru==0.6.0",
-        "torchaudio==0.12.1",
-    ]
+CACHE_DIR = "/cache"
+RAW_AUDIO_DIR = pathlib.Path(CACHE_DIR, "raw_audio")
+METADATA_DIR = pathlib.Path(CACHE_DIR, "metadata")
+TRANSCRIPTIONS_DIR = pathlib.Path(CACHE_DIR, "transcriptions")
+SEARCH_DIR = pathlib.Path(CACHE_DIR, "search")
+podchaser_podcast_ids = {
+    "ezra_klein_nyt": 1582975,
+    "ezra_klein_vox": 82327,
+    "lex_fridman": 721928,
+}
+
+
+@dataclasses.dataclass
+class ModelSpec:
+    name: str
+    params: str
+    relative_speed: int  # Higher is faster
+
+
+supported_whisper_models = {
+    "tiny.en": ModelSpec(name="tiny.en", params="39M", relative_speed=32),
+    "base.en": ModelSpec(name="base.en", params="74M", relative_speed=16),
+    "small.en": ModelSpec(name="small.en", params="244M", relative_speed=6),
+    "medium.en": ModelSpec(name="medium.en", params="769M", relative_speed=2),
+    "large": ModelSpec(name="large", params="1550M", relative_speed=1),
+}
+
+
+volume = modal.SharedVolume().persist("dataset-cache-vol")
+app_image = (
+    modal.DebianSlim()
+    .pip_install(
+        [
+            "https://github.com/openai/whisper/archive/5d8d3e75a4826fe5f01205d81c3017a805fc2bf9.tar.gz",
+            "dacite",
+            "jiwer",
+            "ffmpeg-python",
+            "gql[all]~=3.0.0a5",
+            "pandas",
+            "loguru==0.6.0",
+            "torchaudio==0.12.1",
+        ]
+    )
+    .apt_install(
+        [
+            "ffmpeg",
+        ]
+    )
 )
+web_image = modal.DebianSlim().pip_install(["dacite"])
+search_image = modal.DebianSlim().pip_install(
+    ["scikit-learn~=0.24.2", "tqdm~=4.46.0", "numpy~=1.17.3", "dacite"]
+)
+
 stub = modal.Stub("whisper-pod-transcriber", image=app_image)
+web_app = FastAPI()
 
 
-def load_dataset():
-    import torch
-    import torchaudio
-    import whisper
+@web_app.get("/episodes")
+async def episodes():
+    import dacite
+    from collections import defaultdict
 
-    class LibriSpeech(torch.utils.data.Dataset):
-        """
-        A simple class to wrap LibriSpeech and trim/pad the audio to 30 seconds.
-        It will drop the last few seconds of a very small portion of the utterances.
-        """
+    episodes_by_show = defaultdict(list)
+    all_episodes = []
+    episodes_content = ""
+    if METADATA_DIR.exists():
+        for file in METADATA_DIR.iterdir():
+            with open(file, "r") as f:
+                data = json.load(f)
+                ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
+                episodes_by_show[ep.show].append(ep)
+                all_episodes.append(ep)
 
-        def __init__(self, device, split="test-clean"):
-            self.dataset = torchaudio.datasets.LIBRISPEECH(
-                root=os.path.expanduser("~/.cache"),
-                url=split,
-                download=True,
+    for show, episodes_by_show in episodes_by_show.items():
+        episodes_content += f"<h4>{show}</h4>\n"
+        episodes_content += "\n<ul>"
+        for ep in episodes_by_show:
+            episodes_content += f"\n<li>{ep.title} - {ep.publish_date}</li>"
+        episodes_content += "\n</ul>"
+    content = f"""
+    <html>
+        <h1>Modal Transcriber!</h1>
+        <h3>Transcribed episodes!</h3>
+        {episodes_content}
+    </html>
+    """
+    return HTMLResponse(content=content, status_code=200)
+
+
+@web_app.get("/")
+async def root(query: str = ""):
+    import dacite
+    import json
+    from collections import defaultdict
+
+    all_episodes = []
+    if METADATA_DIR.exists():
+        for file in METADATA_DIR.iterdir():
+            with open(file, "r") as f:
+                data = json.load(f)
+                ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
+                all_episodes.append(ep)
+
+    search_results_html = ""
+    if query:
+        search_results = search_transcripts(items=all_episodes, query=query)
+        list_items = []
+        for score, episode in search_results:
+            list_items.append(
+                f"""<li>
+                    <span>show: {episode.show}</span></br>
+                    <span>score: {score}</span></br>
+                    <span>title: {episode.title}</span></br>
+                    <span>url: {episode.episode_url}</span></br>
+                </li>"""
             )
-            self.device = device
+        search_results_html = "\n".join(list_items)
+    else:
+        search_results_html = ""
 
-        def __len__(self):
-            return len(self.dataset)
-
-        def __getitem__(self, item):
-            audio, sample_rate, text, _, _, _ = self.dataset[item]
-            assert sample_rate == 16000
-            audio = whisper.pad_or_trim(audio.flatten()).to(self.device)
-            mel = whisper.log_mel_spectrogram(audio)
-
-            return (mel, text)
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dataset = LibriSpeech(split="test-clean", device=device)
-    return torch.utils.data.DataLoader(dataset, batch_size=16)
+    content = f"""
+    <html>
+        <h1>Modal Transcriber!</h1>
+        <section>
+            <h4>Your query:</h4>
+            <h5>{query}</h5>
+            <h4>Your search results:</h4>
+            <ul>{search_results_html}</ul>
+        </section>
+    </html>
+    """
+    return HTMLResponse(content=content, status_code=200)
 
 
-def evaluate(data):
-    import jiwer
-    from whisper.normalizers import EnglishTextNormalizer
+@stub.asgi(
+    image=web_image,
+    shared_volumes={CACHE_DIR: volume},
+)
+def fastapi_app():
+    return web_app
 
-    normalizer = EnglishTextNormalizer()
-    data["hypothesis_clean"] = [normalizer(text) for text in data["hypothesis"]]
-    data["reference_clean"] = [normalizer(text) for text in data["reference"]]
-    wer = jiwer.wer(list(data["reference_clean"]), list(data["hypothesis_clean"]))
-    print(f"WER: {wer * 100:.2f} %")
+
+def _write_json(obj, filepath, msg="") -> None:
+    suffix = f"; {msg}" if msg else ""
+    print(f"writing {filepath}{suffix}")
+    with open(filepath, "w") as f:
+        json.dump(obj, f)
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+@stub.function(schedule=modal.Period(hours=4))
+def refresh_index():
+    print(f"Running scheduled index refresh at {utc_now()}")
+    index()
+
+
+def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
+    query_parts = query.lower().strip().split()  # split by spaces
+    # sim_tfidf_svm_json = pathlib.Path(METADATA_DIR, "sim_tfidf_svm.json")
+    search_json = pathlib.Path(SEARCH_DIR, "search.json")
+    # # load computed paper similarities
+    # with open(sim_tfidf_svm_json, "r") as f:
+    #     sim_dict = json.load(f)
+
+    print("load search dictionary for each paper")
+    with open(search_json, "r") as f:
+        search_dict = json.load(f)
+
+    n = len(items)
+    scores = []
+    for i, sd in enumerate(search_dict):
+        score = sum(sd.get(q, 0) for q in query_parts)
+        if score == 0:
+            continue  # no match whatsoever, don't include
+        score += (
+            1.0 * (n - i) / n
+        )  # give a small boost to more recent papers (low index)
+        scores.append((score, items[i]))
+    scores.sort(reverse=True, key=lambda x: x[0])  # descending
+    return scores
 
 
 @stub.function(
-    image=app_image,
-    secret=modal.ref("podchaser"),
-    gpu=True,
+    image=search_image,
+    shared_volumes={CACHE_DIR: volume},
 )
-def run():
-    import pandas as pd
-    import numpy as np
-    import whisper
-    from tqdm import tqdm
+def index():
+    import dacite
+    from collections import defaultdict
 
-    model = whisper.load_model("base.en")
+    print("Starting transcript indexing process.")
+    SEARCH_DIR.mkdir(parents=True, exist_ok=True)
+
+    episodes = defaultdict(list)
+    guid_hash_to_episodes = {}
+    if METADATA_DIR.exists():
+        for file in METADATA_DIR.iterdir():
+            with open(file, "r") as f:
+                data = json.load(f)
+                # Hack: Some files in this directory aren't episode metadata
+                if isinstance(data, list):
+                    continue
+                ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
+                episodes[ep.show].append(ep)
+                guid_hash_to_episodes[ep.guid_hash] = ep
+
+    print(f"Loaded {len(guid_hash_to_episodes)} podcast episodes.")
+
+    transcripts = {}
+    if TRANSCRIPTIONS_DIR.exists():
+        for file in TRANSCRIPTIONS_DIR.iterdir():
+            with open(file, "r") as f:
+                data = json.load(f)
+                guid_hash = file.stem.split("-")[0]
+                transcripts[guid_hash] = data
+
+    records = [
+        search.SearchRecord(
+            title=guid_hash_to_episodes[key].title,
+            text=value["text"],
+        )
+        for key, value in transcripts.items()
+        if key in guid_hash_to_episodes
+    ]
+
+    print(f"Matched {len(records)} transcripts against episode metadata records.")
+
     print(
-        f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
-        f"and has {sum(np.prod(p.shape) for p in model.parameters()):,} parameters."
+        "calculate feature vectors for all abstracts and keep track of most similar other papers"
+    )
+    X, v = search.calculate_tfidf_features(records)
+    sim_svm = search.calculate_similarity_with_svm(X)
+    _write_json(
+        sim_svm,
+        pathlib.Path(SEARCH_DIR, "sim_tfidf_svm.json"),
     )
 
-    # predict without timestamps for short-form transcription
-    options = whisper.DecodingOptions(language="en", without_timestamps=True)
-    hypotheses = []
-    references = []
-    print("Loading dataset")
-    loader = load_dataset()
-
-    print("Running inference")
-    for mels, texts in tqdm(loader):
-        results = model.decode(mels, options)
-        hypotheses.extend([result.text for result in results])
-        references.extend(texts)
-
-    data = pd.DataFrame(dict(hypothesis=hypotheses, reference=references))
-    print(data)
-    print("Evaluating model performance.")
-    evaluate(data)
+    print("calculate the search index to support search")
+    search_dict = search.build_search_index(records, v)
+    _write_json(
+        search_dict,
+        pathlib.Path(SEARCH_DIR, "search.json"),
+    )
 
 
+@stub.function(
+    image=app_image,
+    shared_volumes={CACHE_DIR: volume},
+    gpu=True,
+    concurrency_limit=10,
+)
+def transcribe_episode(
+    audio_filepath: pathlib.Path,
+    result_path: pathlib.Path,
+    model: ModelSpec,
+):
+    import torch
+    import whisper
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = whisper.load_model(model.name, device=device)
+    result = model.transcribe(str(audio_filepath), language="en")
+    print(f"Writing openai/whisper transcription to {result_path}")
+    with open(result_path, "w") as f:
+        json.dump(result, f, indent=4)
+
+
+@stub.function(
+    image=app_image,
+    shared_volumes={CACHE_DIR: volume},
+)
+def process_episode(episode: podcast.EpisodeMetadata):
+    RAW_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    TRANSCRIPTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    METADATA_DIR.mkdir(parents=True, exist_ok=True)
+    destination_path = RAW_AUDIO_DIR / episode.guid_hash
+    podcast.store_original_audio(
+        url=episode.original_download_link,
+        destination=destination_path,
+    )
+
+    model = supported_whisper_models["base.en"]
+    model_slug = f"whisper-{model.name.replace('.', '-')}"
+    print(f"Using the {model.name} model which has {model.params} parameters.")
+
+    metadata_path = METADATA_DIR / f"{episode.guid_hash}.json"
+    with open(metadata_path, "w") as f:
+        json.dump(dataclasses.asdict(episode), f)
+    print(f"Wrote episode metadata to {metadata_path}")
+
+    transcription_path = TRANSCRIPTIONS_DIR / f"{episode.guid_hash}-{model_slug}.json"
+    if transcription_path.exists():
+        print(
+            f"Transcription already exists for '{episode.title}' with ID {episode.guid_hash}."
+        )
+        print(f"Skipping GPU transcription.")
+    else:
+        transcribe_episode(
+            audio_filepath=destination_path,
+            result_path=transcription_path,
+            model=model,
+        )
+    return episode
 
 
 @stub.function(
     image=app_image,
     secret=modal.ref("podchaser"),
+    shared_volumes={CACHE_DIR: volume},
 )
-def transcribe():
+def fetch_episodes(show_name: str, podcast_id: str):
+    import hashlib
     from gql import gql
-    podcast_id = "1582975"  # NYT Ezra Klein Show
+
     client = podcast.create_podchaser_client()
-    episodes = podcast.fetch_episodes_data(gql, client, podcast_id)
-    print(episodes)
+    episodes_raw = podcast.fetch_episodes_data(gql, client, podcast_id)
+    return [
+        podcast.EpisodeMetadata(
+            show=show_name,
+            title=ep["title"],
+            publish_date=ep["airDate"],
+            description=ep["description"],
+            episode_url=ep["url"],
+            html_description=ep["htmlDescription"],
+            guid=ep["guid"],
+            guid_hash=hashlib.md5(ep["guid"].encode("utf-8")).hexdigest(),
+            original_download_link=ep["audioUrl"],
+        )
+        for ep in episodes_raw
+    ]
 
 
 if __name__ == "__main__":
+    cmd = sys.argv[1]
+    show_name = "lex_fridman"
+    podcast_id = podchaser_podcast_ids[show_name]
     with stub.run() as app:
         print(f"Modal app ID -> {app.app_id}")
-        # run()
-        transcribe()
+        if cmd == "transcribe":
+            episodes = fetch_episodes(show_name=show_name, podcast_id=podcast_id)
+            temp_limit = 5  # TODO: Remove when basics are working
+            for result in process_episode.map(
+                episodes[:temp_limit], order_outputs=False
+            ):
+                print("Processed:")
+                print(result.title)
+        elif cmd == "serve":
+            stub.serve()
+        elif cmd == "index":
+            index()
+        else:
+            exit(f"Unknown command {cmd}. Supported commands: [transcribe, run, serve]")
