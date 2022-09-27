@@ -5,6 +5,7 @@ of podcasts.
 import datetime
 from dataclasses import dataclass
 import dataclasses
+from importlib.resources import path
 import json
 import os
 import pathlib
@@ -118,6 +119,8 @@ async def root(query: str = ""):
     import json
     from collections import defaultdict
 
+    all_json = pathlib.Path(SEARCH_DIR, "jall.json")
+
     all_episodes = []
     if METADATA_DIR.exists():
         for file in METADATA_DIR.iterdir():
@@ -125,10 +128,17 @@ async def root(query: str = ""):
                 data = json.load(f)
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
                 all_episodes.append(ep)
+    print("load all indexed episodes")
+    with open(all_json, "r") as f:
+        items_data = json.load(f)
+        indexed_eps = [
+            dacite.from_dict(data_class=podcast.EpisodeMetadata, data=x)
+            for x in items_data
+        ]
 
     search_results_html = ""
     if query:
-        search_results = search_transcripts(items=all_episodes, query=query)
+        search_results = search_transcripts(items=indexed_eps, query=query)
         list_items = []
         for score, episode in search_results:
             list_items.append(
@@ -190,7 +200,7 @@ def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
     # with open(sim_tfidf_svm_json, "r") as f:
     #     sim_dict = json.load(f)
 
-    print("load search dictionary for each paper")
+    print("load search dictionary")
     with open(search_json, "r") as f:
         search_dict = json.load(f)
 
@@ -214,6 +224,7 @@ def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
 )
 def index():
     import dacite
+    import dataclasses
     from collections import defaultdict
 
     print("Starting transcript indexing process.")
@@ -242,21 +253,33 @@ def index():
                 guid_hash = file.stem.split("-")[0]
                 transcripts[guid_hash] = data
 
-    records = [
-        search.SearchRecord(
-            title=guid_hash_to_episodes[key].title,
-            text=value["text"],
-        )
-        for key, value in transcripts.items()
-        if key in guid_hash_to_episodes
-    ]
+    # Important: These have to be the same length and have same episode order.
+    # i-th element of indexed_episodes is the episode indexed by the i-th element
+    # of search_records
+    indexed_episodes = []
+    search_records = []
+    for key, value in transcripts.items():
+        idxd_episode = guid_hash_to_episodes.get(key)
+        if idxd_episode:
+            search_records.append(
+                search.SearchRecord(
+                    title=idxd_episode.title,
+                    text=value["text"],
+                )
+            )
+            # Prepare records for JSON serialization
+            indexed_episodes.append(dataclasses.asdict(idxd_episode))
 
-    print(f"Matched {len(records)} transcripts against episode metadata records.")
+    print(
+        f"Matched {len(search_records)} transcripts against episode metadata records."
+    )
+
+    _write_json(indexed_episodes, pathlib.Path(SEARCH_DIR, "jall.json"))
 
     print(
         "calculate feature vectors for all abstracts and keep track of most similar other papers"
     )
-    X, v = search.calculate_tfidf_features(records)
+    X, v = search.calculate_tfidf_features(search_records)
     sim_svm = search.calculate_similarity_with_svm(X)
     _write_json(
         sim_svm,
@@ -264,7 +287,7 @@ def index():
     )
 
     print("calculate the search index to support search")
-    search_dict = search.build_search_index(records, v)
+    search_dict = search.build_search_index(search_records, v)
     _write_json(
         search_dict,
         pathlib.Path(SEARCH_DIR, "search.json"),
