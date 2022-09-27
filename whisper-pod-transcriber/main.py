@@ -32,6 +32,7 @@ podchaser_podcast_ids = {
     "ezra_klein_nyt": 1582975,
     "ezra_klein_vox": 82327,
     "lex_fridman": 721928,
+    "The Joe Rogan Experience": 10829,
 }
 
 
@@ -241,14 +242,13 @@ def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
 @stub.function(
     image=app_image,
     secret=modal.ref("podchaser"),
-    # shared_volumes={CACHE_DIR: volume},
 )
 def search_podcast(name):
     from gql import gql
 
     print(f"Searching for '{name}'")
     client = podcast.create_podchaser_client()
-    podcasts_raw = podcast.search_podcast_name(gql, client, name)
+    podcasts_raw = podcast.search_podcast_name(gql, client, name, max_results=3)
     print(f"Found {len(podcasts_raw)} results for '{name}'")
     return [
         podcast.PodcastMetadata(
@@ -337,6 +337,31 @@ def index():
     )
 
 
+@web_app.post("/transcribe")
+async def transcribe_job(request: Request):
+    # Use aio_lookup since we're in an async context.
+    form = await request.form()
+    pod_name = form["podcast_name"]
+    pod_id = form["podcast_id"]
+    call = transcribe_podcast.submit(name=pod_name, podcast_id=pod_id)
+    return {"call_id": call.object_id}
+
+
+@stub.function(
+    image=app_image,
+    shared_volumes={CACHE_DIR: volume},
+    concurrency_limit=2,
+)
+def transcribe_podcast(name: str, podcast_id: str):
+    episodes = fetch_episodes(show_name=name, podcast_id=podcast_id)
+    # Most recent episodes
+    episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
+    temp_limit = 5  # TODO: Remove when basics are working
+    for result in process_episode.map(episodes[:temp_limit], order_outputs=False):
+        print("Processed:")
+        print(result.title)
+
+
 @stub.function(
     image=app_image,
     shared_volumes={CACHE_DIR: volume},
@@ -402,13 +427,16 @@ def process_episode(episode: podcast.EpisodeMetadata):
     secret=modal.ref("podchaser"),
     shared_volumes={CACHE_DIR: volume},
 )
-def fetch_episodes(show_name: str, podcast_id: str):
+def fetch_episodes(show_name: str, podcast_id: str, max_episodes=100):
     import hashlib
     from gql import gql
 
     client = podcast.create_podchaser_client()
-    episodes_raw = podcast.fetch_episodes_data(gql, client, podcast_id)
-    return [
+    episodes_raw = podcast.fetch_episodes_data(
+        gql, client, podcast_id, max_episodes=max_episodes
+    )
+    print(f"Retreived {len(episodes_raw)} raw episodes")
+    episodes = [
         podcast.EpisodeMetadata(
             show=show_name,
             title=ep["title"],
@@ -421,25 +449,21 @@ def fetch_episodes(show_name: str, podcast_id: str):
             original_download_link=ep["audioUrl"],
         )
         for ep in episodes_raw
+        if "guid" in ep
     ]
+    no_guid_count = len(episodes) - len(episodes_raw)
+    print(f"{no_guid_count} episodes had no GUID and couldn't be used.")
+    return episodes
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1]
-    show_name = "lex_fridman"
-    podcast_id = podchaser_podcast_ids[show_name]
     if cmd == "transcribe":
+        show_name = sys.argv[2]
+        podcast_id = podchaser_podcast_ids[show_name]
         with stub.run() as app:
             print(f"Modal app ID -> {app.app_id}")
-            episodes = fetch_episodes(show_name=show_name, podcast_id=podcast_id)
-            # Most recent episodes
-            episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
-            temp_limit = 5  # TODO: Remove when basics are working
-            for result in process_episode.map(
-                episodes[:temp_limit], order_outputs=False
-            ):
-                print("Processed:")
-                print(result.title)
+            transcribe_podcast(name=show_name, podcast_id=podcast_id)
     elif cmd == "serve":
         stub.serve()
     elif cmd == "index":

@@ -125,7 +125,7 @@ def search_podcast_name(gql, client, name, max_results=5):
     return podcasts
 
 
-def fetch_episodes_data(gql, client, podcast_id):
+def fetch_episodes_data(gql, client, podcast_id, max_episodes=100):
     """
     NYT Episodes:
     curl https://podbay.fm/api/podcast?slug=the-ezra-klein-show-280811&page=0&reverse=false&refresh=true | jq .
@@ -179,6 +179,8 @@ def fetch_episodes_data(gql, client, podcast_id):
         episodes_in_page = result["podcast"]["episodes"]["data"]
         episodes.extend(episodes_in_page)
         current_page += 1
+        if len(episodes) >= max_episodes:
+            break
     return episodes
 
 
