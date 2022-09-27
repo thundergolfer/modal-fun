@@ -19,6 +19,14 @@ class EpisodeMetadata:
     original_download_link: str
 
 
+@dataclasses.dataclass
+class PodcastMetadata:
+    id: str
+    title: str
+    description: str
+    web_url: str
+
+
 class DownloadResult(NamedTuple):
     data: bytes
     content_type: str
@@ -75,6 +83,46 @@ def create_podchaser_client():
     )
 
     return Client(transport=transport, fetch_schema_from_transport=True)
+
+
+def search_podcast_name(gql, client, name, max_results=10):
+    podcasts = []
+    has_more_pages = True
+    current_page = 0
+    max_episodes_per_request = 100  # Max allowed by API
+    while has_more_pages:
+        search_podcast_name_query = gql(
+            """
+            query {{
+                podcasts(searchTerm: "{name}", first: {max_episodes_per_request}, page: {current_page}) {{
+                    paginatorInfo {{
+                        currentPage,
+                        hasMorePages,
+                        lastPage,
+                    }},
+                    data {{
+                        id,
+                        title,
+                        description,
+                        webUrl,
+                    }}
+                }}
+            }}
+            """.format(
+                name=name,
+                max_episodes_per_request=max_episodes_per_request,
+                current_page=current_page,
+            )
+        )
+        print(f"Querying Podchaser for podcasts. Current page: {current_page}.")
+        result = client.execute(search_podcast_name_query)
+        has_more_pages = result["podcasts"]["paginatorInfo"]["hasMorePages"]
+        podcasts_in_page = result["podcasts"]["data"]
+        podcasts.extend(podcasts_in_page)
+        if len(podcasts) >= max_results:
+            return podcasts[:max_results]
+        current_page += 1
+    return podcasts
 
 
 def fetch_episodes_data(gql, client, podcast_id):

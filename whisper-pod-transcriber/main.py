@@ -188,6 +188,7 @@ assets_path = pathlib.Path(__file__).parent / "web"
 )
 def fastapi_app():
     import fastapi.staticfiles
+
     web_app.mount("/", fastapi.staticfiles.StaticFiles(directory="/assets", html=True))
 
     return web_app
@@ -230,6 +231,31 @@ def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
         scores.append((score, items[i]))
     scores.sort(reverse=True, key=lambda x: x[0])  # descending
     return scores
+
+
+@stub.function(
+    image=app_image,
+    secret=modal.ref("podchaser"),
+    # shared_volumes={CACHE_DIR: volume},
+)
+def search_podcast(name):
+    from gql import gql
+
+    print(f"Searching for '{name}'")
+    client = podcast.create_podchaser_client()
+    podcasts_raw = podcast.search_podcast_name(gql, client, name)
+    print(f"Found {len(podcasts_raw)} results for '{name}'")
+    podcasts = [
+        podcast.PodcastMetadata(
+            id=pod["id"],
+            title=pod["title"],
+            description=pod["description"],
+            web_url=pod["webUrl"],
+        )
+        for pod in podcasts_raw
+    ]
+    for p in podcasts:
+        print(p)
 
 
 @stub.function(
@@ -416,5 +442,10 @@ if __name__ == "__main__":
     elif cmd == "index":
         with stub.run():
             index()
+    elif cmd == "search-podcast":
+        with stub.run():
+            search_podcast(sys.argv[2])
     else:
-        exit(f"Unknown command {cmd}. Supported commands: [transcribe, run, serve]")
+        exit(
+            f"Unknown command {cmd}. Supported commands: [transcribe, run, serve, index, search-podcast]"
+        )
