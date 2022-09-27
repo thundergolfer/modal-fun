@@ -116,13 +116,10 @@ async def episodes():
 @web_app.post("/podcasts")
 async def podcasts(request: Request):
     import dataclasses
+
     form = await request.form()
     name = form["podcast"]
-    podcasts = [
-        dataclasses.asdict(pod)
-        for pod
-        in search_podcast(name)
-    ]
+    podcasts = [dataclasses.asdict(pod) for pod in search_podcast(name)]
     return JSONResponse(content=podcasts)
 
 
