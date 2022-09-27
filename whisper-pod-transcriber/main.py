@@ -385,6 +385,8 @@ if __name__ == "__main__":
         print(f"Modal app ID -> {app.app_id}")
         if cmd == "transcribe":
             episodes = fetch_episodes(show_name=show_name, podcast_id=podcast_id)
+            # Most recent episodes
+            episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
             temp_limit = 5  # TODO: Remove when basics are working
             for result in process_episode.map(
                 episodes[:temp_limit], order_outputs=False
