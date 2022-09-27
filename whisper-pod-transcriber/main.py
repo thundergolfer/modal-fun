@@ -194,11 +194,7 @@ def refresh_index():
 
 def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
     query_parts = query.lower().strip().split()  # split by spaces
-    # sim_tfidf_svm_json = pathlib.Path(METADATA_DIR, "sim_tfidf_svm.json")
     search_json = pathlib.Path(SEARCH_DIR, "search.json")
-    # # load computed paper similarities
-    # with open(sim_tfidf_svm_json, "r") as f:
-    #     sim_dict = json.load(f)
 
     print("load search dictionary")
     with open(search_json, "r") as f:
@@ -212,7 +208,7 @@ def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
             continue  # no match whatsoever, don't include
         score += (
             1.0 * (n - i) / n
-        )  # give a small boost to more recent papers (low index)
+        )  # give a small boost to more recent episodes (low index)
         scores.append((score, items[i]))
     scores.sort(reverse=True, key=lambda x: x[0])  # descending
     return scores
@@ -277,7 +273,7 @@ def index():
     _write_json(indexed_episodes, pathlib.Path(SEARCH_DIR, "jall.json"))
 
     print(
-        "calculate feature vectors for all abstracts and keep track of most similar other papers"
+        "calculate feature vectors for all transcripts and keep track of most similar other episodes"
     )
     X, v = search.calculate_tfidf_features(search_records)
     sim_svm = search.calculate_similarity_with_svm(X)
