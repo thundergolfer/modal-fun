@@ -113,7 +113,12 @@ async def episodes():
     return HTMLResponse(content=content, status_code=200)
 
 
-@web_app.get("/")
+@web_app.post("/podcasts")
+async def podcasts():
+    return {}
+
+
+@web_app.get("/old")
 async def root(query: str = ""):
     import dacite
     import json
@@ -167,11 +172,24 @@ async def root(query: str = ""):
     return HTMLResponse(content=content, status_code=200)
 
 
+# Finally, we mount the static files for our front-end. We've made [a simple React
+# app](https://github.com/modal-labs/modal-examples/tree/main/09_job_queues/doc_ocr_frontend)
+# that hits the two endpoints defined above. To package these files with our app, first
+# we get the local assets path, and then create a modal [`Mount`](/docs/guide/local-data#mounting-directories)
+# that mounts this directory at `/assets` inside our container. Then, we instruct FastAPI to [serve
+# this static file directory](https://fastapi.tiangolo.com/tutorial/static-files/) at our rooth path.
+
+assets_path = pathlib.Path(__file__).parent / "web"
+
+
 @stub.asgi(
-    image=web_image,
+    mounts=[modal.Mount("/assets", local_dir=assets_path)],
     shared_volumes={CACHE_DIR: volume},
 )
 def fastapi_app():
+    import fastapi.staticfiles
+    web_app.mount("/", fastapi.staticfiles.StaticFiles(directory="/assets", html=True))
+
     return web_app
 
 
@@ -381,9 +399,9 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     show_name = "lex_fridman"
     podcast_id = podchaser_podcast_ids[show_name]
-    with stub.run() as app:
-        print(f"Modal app ID -> {app.app_id}")
-        if cmd == "transcribe":
+    if cmd == "transcribe":
+        with stub.run() as app:
+            print(f"Modal app ID -> {app.app_id}")
             episodes = fetch_episodes(show_name=show_name, podcast_id=podcast_id)
             # Most recent episodes
             episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
@@ -393,9 +411,10 @@ if __name__ == "__main__":
             ):
                 print("Processed:")
                 print(result.title)
-        elif cmd == "serve":
-            stub.serve()
-        elif cmd == "index":
+    elif cmd == "serve":
+        stub.serve()
+    elif cmd == "index":
+        with stub.run():
             index()
-        else:
-            exit(f"Unknown command {cmd}. Supported commands: [transcribe, run, serve]")
+    else:
+        exit(f"Unknown command {cmd}. Supported commands: [transcribe, run, serve]")
