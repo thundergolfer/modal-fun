@@ -183,7 +183,7 @@ def _write_json(obj, filepath, msg="") -> None:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 @stub.function(schedule=modal.Period(hours=4))
