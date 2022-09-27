@@ -15,7 +15,7 @@ import sys
 from typing import Any, NamedTuple
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 import modal
 
@@ -114,8 +114,16 @@ async def episodes():
 
 
 @web_app.post("/podcasts")
-async def podcasts():
-    return {}
+async def podcasts(request: Request):
+    import dataclasses
+    form = await request.form()
+    name = form["podcast"]
+    podcasts = [
+        dataclasses.asdict(pod)
+        for pod
+        in search_podcast(name)
+    ]
+    return JSONResponse(content=podcasts)
 
 
 @web_app.get("/old")
@@ -245,7 +253,7 @@ def search_podcast(name):
     client = podcast.create_podchaser_client()
     podcasts_raw = podcast.search_podcast_name(gql, client, name)
     print(f"Found {len(podcasts_raw)} results for '{name}'")
-    podcasts = [
+    return [
         podcast.PodcastMetadata(
             id=pod["id"],
             title=pod["title"],
@@ -254,8 +262,6 @@ def search_podcast(name):
         )
         for pod in podcasts_raw
     ]
-    for p in podcasts:
-        print(p)
 
 
 @stub.function(
@@ -444,7 +450,8 @@ if __name__ == "__main__":
             index()
     elif cmd == "search-podcast":
         with stub.run():
-            search_podcast(sys.argv[2])
+            for pod in search_podcast(sys.argv[2]):
+                print(pod)
     else:
         exit(
             f"Unknown command {cmd}. Supported commands: [transcribe, run, serve, index, search-podcast]"

@@ -17,9 +17,9 @@ function Spinner({ config }) {
   function PodcastList({ podcasts }) {
     console.log("podcasts:");
     console.log(podcasts);
-    const listItems = podcasts.map((number) =>
-        <li key={number.toString()}>
-            {number}
+    const listItems = podcasts.map((pod) =>
+        <li key={pod.id}>
+            {JSON.stringify(pod)}
         </li>
     );
     return (
@@ -119,9 +119,8 @@ function Spinner({ config }) {
         throw new Error("An error occurred: " + resp.status);
       }
       const body = await resp.json();
-      console.log(body);
-      setPodcasts([1, 2, 3]);
-    //   setCallId(body.call_id);
+      setPodcasts(body);
+        //   setCallId(body.call_id);
     };
   
     return (
