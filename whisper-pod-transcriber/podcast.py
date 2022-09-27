@@ -85,7 +85,7 @@ def create_podchaser_client():
     return Client(transport=transport, fetch_schema_from_transport=True)
 
 
-def search_podcast_name(gql, client, name, max_results=10):
+def search_podcast_name(gql, client, name, max_results=5):
     podcasts = []
     has_more_pages = True
     current_page = 0

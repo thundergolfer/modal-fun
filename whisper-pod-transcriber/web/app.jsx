@@ -14,11 +14,30 @@ function Spinner({ config }) {
   return <span ref={ref} />;
 }
 
+function truncate(str, n) {
+  return str.length > n ? str.slice(0, n - 1) + "…" : str;
+}
+
+function Podcast({ podcast }) {
+  return (
+    <div class="max-w-sm rounded overflow-hidden shadow-lg">
+      <div class="px-6 py-4">
+        <div class="font-bold text-xl mb-2">{podcast.title}</div>
+        <p class="text-gray-700 text-base">
+          {truncate(podcast.description, 200)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function PodcastList({ podcasts }) {
   console.log("podcasts:");
   console.log(podcasts);
   const listItems = podcasts.map((pod) => (
-    <li key={pod.id}>{JSON.stringify(pod)}</li>
+    <li key={pod.id}>
+      <Podcast podcast={pod} />
+    </li>
   ));
   return <ul>{listItems}</ul>;
 }
