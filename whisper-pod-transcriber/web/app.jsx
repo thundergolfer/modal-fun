@@ -47,7 +47,7 @@ function Podcast({ podcast }) {
     }, [isSending]); // update the callback if the state changes
 
   return (
-    <div className="max-w-sm rounded overflow-hidden shadow-lg">
+    <div className="max-w-2xl rounded overflow-hidden shadow-lg">
       <div className="px-6 py-4">
         <div className="font-bold text-xl mb-2">{podcast.title}</div>
         <p className="text-gray-700 text-base">
@@ -174,7 +174,7 @@ function App() {
 
   return (
     <div className="absolute inset-0 bg-gradient-to-r from-green-300 via-green-500 to-green-300">
-      <div className="mx-auto max-w-md py-8">
+      <div className="mx-auto max-w-2xl py-8">
         <main className="rounded-xl bg-white p-6">
           {!callId && <Form onSubmit={handleSubmission} />}
           {podcasts && <PodcastList podcasts={podcasts} />}
