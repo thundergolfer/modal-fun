@@ -3,12 +3,12 @@ import os
 import pathlib
 import urllib.request
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Union
 
 
 @dataclasses.dataclass
 class EpisodeMetadata:
-    podcast_id: str
+    podcast_id: Union[str, int]
     show: str  # TODO: Rename to `podcast_title`
     title: str
     publish_date: str  # The publish date of the episode as specified by the publisher

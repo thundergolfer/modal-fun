@@ -26,6 +26,7 @@ import search
 CACHE_DIR = "/cache"
 RAW_AUDIO_DIR = pathlib.Path(CACHE_DIR, "raw_audio")
 METADATA_DIR = pathlib.Path(CACHE_DIR, "metadata")
+COMPLETED_DIR = pathlib.Path(CACHE_DIR, "completed")
 TRANSCRIPTIONS_DIR = pathlib.Path(CACHE_DIR, "transcriptions")
 SEARCH_DIR = pathlib.Path(CACHE_DIR, "search")
 podchaser_podcast_ids = {
@@ -173,7 +174,7 @@ async def podcast_transcripts_page(podcast_id: str):
                 if isinstance(data, list):
                     continue
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
-                if ep.podcast_id == podcast_id:
+                if str(ep.podcast_id) == podcast_id:
                     podcast_episodes.append(ep)
 
     transcript_list_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
@@ -212,14 +213,28 @@ async def podcast_transcripts_page(podcast_id: str):
     return HTMLResponse(content=content, status_code=200)
 
 
+def is_podcast_recently_transcribed(podcast_id: str):
+    if not COMPLETED_DIR.exists():
+        return False
+    completion_marker_path = COMPLETED_DIR / f"{podcast_id}.txt"
+    return completion_marker_path.exists()
+
+
 @web_app.post("/podcasts")
-async def podcasts(request: Request):
+async def podcasts_endpoint(request: Request):
     import dataclasses
 
     form = await request.form()
     name = form["podcast"]
-    podcasts = [dataclasses.asdict(pod) for pod in search_podcast(name)]
-    return JSONResponse(content=podcasts)
+    podcasts_response = []
+    for podcast in search_podcast(name):
+        data = dataclasses.asdict(podcast)
+        if is_podcast_recently_transcribed(podcast.id):
+            data["recently_transcribed"] = "true"
+        else:
+            data["recently_transcribed"] = "false"
+        podcasts_response.append(data)
+    return JSONResponse(content=podcasts_response)
 
 
 @web_app.get("/old")
@@ -458,6 +473,12 @@ def transcribe_podcast(name: str, podcast_id: str):
     for result in process_episode.map(episodes[:temp_limit], order_outputs=False):
         print("Processed:")
         print(result.title)
+
+    COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
+    completion_marker_path = COMPLETED_DIR / f"{podcast_id}.txt"
+    with open(completion_marker_path, "w") as f:
+        f.write(str(utc_now()))
+    print(f"Marked podcast {podcast_id} as recently transcribed.")
 
 
 @stub.function(
