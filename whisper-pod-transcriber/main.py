@@ -118,10 +118,15 @@ async def episodes():
 
 @web_app.get("/transcripts/{podcast_id}/{episode_guid_hash}")
 async def episode_transcript_page(podcast_id: str, episode_guid_hash):
+    import dacite
     model_slug = "whisper-base-en"  # TODO: Hardcoded for now.
+    episode_metadata_path = METADATA_DIR / f"{episode_guid_hash}.json"
     transcription_path = TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
     with open(transcription_path, "r") as f:
         data = json.load(f)
+    with open(episode_metadata_path, "r") as f:
+        metadata = json.load(f)
+        episode = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=metadata)
 
     segments_ul_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
     for segment in data["segments"]:
@@ -131,7 +136,7 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
         """
         segments_ul_html += segment_li
     segments_ul_html += "</ul>"
-
+    episode_description_html = episode.html_description.replace('<p>', '<p class=\'py-1\'>')
     content = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -143,13 +148,17 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
     </head>
 
     <body class="bg-gray-50">
-        <div class="mx-auto max-w-md py-16">
-            Hello and welcome to the individual transcripts page!
-
-            episode hash: {episode_guid_hash}
+        <div class="mx-auto max-w-4xl py-8 rounded overflow-hidden shadow-lg">
+            <div class="px-6 py-4">
+                <div class="font-bold text-l text-green-500 mb-2">{episode.show}</div>
+                <div class="font-bold text-xl mb-2">{episode.title}</div>
+                <div class="text-gray-700 text-sm py-4">
+                    {episode_description_html}
+                </div>
+            </div>
         </div>
-        <div class="mx-auto max-w-4xl py-16">
-            <h3>Transcript</h3>
+        <div class="mx-auto max-w-4xl py-8">
+            <div class="font-bold text-xl text-blue-500 mb-2">Transcript</div>
             <div>
                 {segments_ul_html}
             </div>
@@ -201,9 +210,6 @@ async def podcast_transcripts_page(podcast_id: str):
 
     <body class="bg-gray-50">
         <div className="mx-auto max-w-md py-16">
-            Hello and welcome to the transcripts page!
-            {podcast_id}
-            Found {len(podcast_episodes)} for you!
             <div class="flex justify-center">
                 {transcript_list_html}
             </div>
