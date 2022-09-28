@@ -8,7 +8,8 @@ from typing import NamedTuple, Optional
 
 @dataclasses.dataclass
 class EpisodeMetadata:
-    show: str
+    podcast_id: str
+    show: str  # TODO: Rename to `podcast_title`
     title: str
     publish_date: str  # The publish date of the episode as specified by the publisher
     description: str

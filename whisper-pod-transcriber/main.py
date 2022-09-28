@@ -114,6 +114,104 @@ async def episodes():
     return HTMLResponse(content=content, status_code=200)
 
 
+@web_app.get("/transcripts/{podcast_id}/{episode_guid_hash}")
+async def episode_transcript_page(podcast_id: str, episode_guid_hash):
+    model_slug = "whisper-base-en"  # TODO: Hardcoded for now.
+    transcription_path = TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
+    with open(transcription_path, "r") as f:
+        data = json.load(f)
+
+    segments_ul_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
+    for segment in data["segments"]:
+        segment_li = f"""<li class="px-6 py-2 border-b border-gray-200 w-full rounded-t-lg">
+            {segment["text"]}
+        </li>
+        """
+        segments_ul_html += segment_li
+    segments_ul_html += "</ul>"
+
+    content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Modal Podcast Transcriber | Episode Transcript</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-gray-50">
+        <div class="mx-auto max-w-md py-16">
+            Hello and welcome to the individual transcripts page!
+
+            episode hash: {episode_guid_hash}
+        </div>
+        <div class="mx-auto max-w-4xl py-16">
+            <h3>Transcript</h3>
+            <div>
+                {segments_ul_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=content, status_code=200)
+
+
+@web_app.get("/transcripts/{podcast_id}")
+async def podcast_transcripts_page(podcast_id: str):
+    import dacite
+
+    # 1. Read all metadata files, filtering for podcast_id
+    # 3. Read all transcripts using guid and hardcoded model id
+    podcast_episodes = []
+    if METADATA_DIR.exists():
+        for file in METADATA_DIR.iterdir():
+            with open(file, "r") as f:
+                data = json.load(f)
+                # Hack: Some files in this directory aren't episode metadata
+                if isinstance(data, list):
+                    continue
+                ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
+                if ep.podcast_id == podcast_id:
+                    podcast_episodes.append(ep)
+
+    transcript_list_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
+    for ep in podcast_episodes:
+        episode_li = f"""<li class="px-6 py-2 border-b border-gray-200 w-full rounded-t-lg">
+            <a href="/transcripts/{ep.podcast_id}/{ep.guid_hash}" class="text-blue-700 no-underline hover:underline">
+                {ep.title}
+            </a> | {ep.show}
+        </li>
+        """
+        transcript_list_html += episode_li
+    transcript_list_html += "</ul>"
+
+    content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Modal Podcast Transcriber | Transcripts</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-gray-50">
+        <div className="mx-auto max-w-md py-16">
+            Hello and welcome to the transcripts page!
+            {podcast_id}
+            Found {len(podcast_episodes)} for you!
+            <div class="flex justify-center">
+                {transcript_list_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=content, status_code=200)
+
+
 @web_app.post("/podcasts")
 async def podcasts(request: Request):
     import dataclasses
@@ -438,6 +536,7 @@ def fetch_episodes(show_name: str, podcast_id: str, max_episodes=100):
     print(f"Retreived {len(episodes_raw)} raw episodes")
     episodes = [
         podcast.EpisodeMetadata(
+            podcast_id=podcast_id,
             show=show_name,
             title=ep["title"],
             publish_date=ep["airDate"],
