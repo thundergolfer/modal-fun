@@ -29,6 +29,7 @@ METADATA_DIR = pathlib.Path(CACHE_DIR, "metadata")
 COMPLETED_DIR = pathlib.Path(CACHE_DIR, "completed")
 TRANSCRIPTIONS_DIR = pathlib.Path(CACHE_DIR, "transcriptions")
 SEARCH_DIR = pathlib.Path(CACHE_DIR, "search")
+assets_path = pathlib.Path(__file__).parent / "web"
 podchaser_podcast_ids = {
     "ezra_klein_nyt": 1582975,
     "ezra_klein_vox": 82327,
@@ -289,16 +290,6 @@ async def root(query: str = ""):
     </html>
     """
     return HTMLResponse(content=content, status_code=200)
-
-
-# Finally, we mount the static files for our front-end. We've made [a simple React
-# app](https://github.com/modal-labs/modal-examples/tree/main/09_job_queues/doc_ocr_frontend)
-# that hits the two endpoints defined above. To package these files with our app, first
-# we get the local assets path, and then create a modal [`Mount`](/docs/guide/local-data#mounting-directories)
-# that mounts this directory at `/assets` inside our container. Then, we instruct FastAPI to [serve
-# this static file directory](https://fastapi.tiangolo.com/tutorial/static-files/) at our rooth path.
-
-assets_path = pathlib.Path(__file__).parent / "web"
 
 
 @stub.asgi(
