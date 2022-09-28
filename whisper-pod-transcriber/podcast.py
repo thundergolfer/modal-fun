@@ -90,7 +90,8 @@ def search_podcast_name(gql, client, name, max_results=5):
     podcasts = []
     has_more_pages = True
     current_page = 0
-    max_episodes_per_request = 100  # Max allowed by API
+    # TODO: Remove pagination. Just need one request.
+    max_episodes_per_request = max_results
     while has_more_pages:
         search_podcast_name_query = gql(
             """

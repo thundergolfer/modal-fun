@@ -460,6 +460,19 @@ async def transcribe_job(request: Request):
     return {"call_id": call.object_id}
 
 
+@web_app.get("/result/{call_id}")
+async def poll_results(call_id: str):
+    from modal.functions import FunctionCall
+
+    function_call = FunctionCall.from_id(call_id)
+    try:
+        result = function_call.get(timeout=0)
+    except TimeoutError:
+        return JSONResponse(status_code=202)
+
+    return result
+
+
 @stub.function(
     image=app_image,
     shared_volumes={CACHE_DIR: volume},

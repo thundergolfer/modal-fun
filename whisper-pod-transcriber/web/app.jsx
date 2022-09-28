@@ -4,7 +4,7 @@ function Spinner({ config }) {
   React.useEffect(() => {
     const spinner = new Spin.Spinner({
       lines: 13,
-      color: "#ffffff",
+      color: "#fff",
       ...config,
     });
     spinner.spin(ref.current);
@@ -20,7 +20,10 @@ function truncate(str, n) {
 
 function Podcast({ podcast }) {
   const [isSending, setIsSending] = React.useState(false);
-  const recentlyTranscribed = podcast.recently_transcribed === "true";
+  const [callId, setCallId] = React.useState(false);
+  const [recentlyTranscribed, setRecentlyTranscribed] = React.useState(
+    podcast.recently_transcribed === "true"
+  );
 
   const sendRequest = React.useCallback(async () => {
     // don't send again while we are sending
@@ -46,11 +49,26 @@ function Podcast({ podcast }) {
     console.log(body);
     // once the request is sent, update state again
     setIsSending(false);
+    setCallId(body.call_id);
   }, [isSending]); // update the callback if the state changes
 
   let buttonContent;
   let transcriptsLink = null;
-  if (isSending) {
+  if (callId) {
+    buttonContent = (
+      <button
+        className="relative text-white bg-green-500 hover:bg-green-700 font-bold py-2 px-4 rounded"
+        disabled={true}
+      >
+        <div className="flex flex-row space-y-4">
+          <div className="mr-4">Waiting...</div>
+          <div>
+            <Result callId={callId} />
+          </div>
+        </div>
+      </button>
+    );
+  } else if (isSending) {
     buttonContent = (
       <button
         className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -70,9 +88,12 @@ function Podcast({ podcast }) {
     );
     let transcriptsHref = `/transcripts/${podcast.id}`;
     transcriptsLink = (
-        <a href={transcriptsHref} className="text-blue-700 no-underline hover:underline">
-            <strong>View Transcripts 📃</strong>
-        </a>
+      <a
+        href={transcriptsHref}
+        className="text-blue-700 no-underline hover:underline"
+      >
+        <strong>View Transcripts 📃</strong>
+      </a>
     );
   } else {
     buttonContent = (
@@ -93,9 +114,9 @@ function Podcast({ podcast }) {
         <p className="text-gray-700 text-base py-4">
           {truncate(podcast.description, 200)}
         </p>
-        <div className="flow-root">  
-            <div className="float-left">{buttonContent}</div> 
-            <div className="float-right">{transcriptsLink}</div>
+        <div className="flow-root">
+          <div className="float-left">{buttonContent}</div>
+          <div className="float-right">{transcriptsLink}</div>
         </div>
       </div>
     </div>
@@ -113,9 +134,15 @@ function PodcastList({ podcasts }) {
   return <ul>{listItems}</ul>;
 }
 
-function Result({ callId, selectedFile }) {
+function Result({ callId, onFinished }) {
   const [result, setResult] = React.useState();
   const [intervalId, setIntervalId] = React.useState();
+  const spinnerConfig = {
+    position: "relative",
+    left: "100%",
+    top: "50%",
+    scale: 0.5,
+  };
 
   React.useEffect(() => {
     if (result) {
@@ -127,25 +154,16 @@ function Result({ callId, selectedFile }) {
       const resp = await fetch(`/result/${callId}`);
       if (resp.status === 200) {
         setResult(await resp.json());
+        onFinished(true);
       }
-    }, 100);
+    }, 1000);
 
     setIntervalId(_intervalID);
 
     return () => clearInterval(intervalId);
   }, [result]);
 
-  return (
-    <div class="flex items-center content-center justify-center space-x-4 ">
-      <img src={URL.createObjectURL(selectedFile)} class="h-[300px]" />
-      {!result && <Spinner config={{}} />}
-      {result && (
-        <p class="w-[200px] p-4 bg-zinc-200 rounded-lg whitespace-pre-wrap text-xs font-mono">
-          {JSON.stringify(result, undefined, 1)}
-        </p>
-      )}
-    </div>
-  );
+  return <div>{result ? "Complete!" : <Spinner config={spinnerConfig} />}</div>;
 }
 
 function Form({ onSubmit }) {
@@ -188,14 +206,14 @@ function Form({ onSubmit }) {
 }
 
 function App() {
-  const [callId, setCallId] = React.useState();
+  const [searching, setSearching] = React.useState(false);
   const [podcasts, setPodcasts] = React.useState();
 
   const handleSubmission = async (podcastName) => {
     const formData = new FormData();
     formData.append("podcast", podcastName);
     console.log(podcastName);
-
+    setSearching(true);
     const resp = await fetch("/podcasts", {
       method: "POST",
       body: formData,
@@ -206,16 +224,16 @@ function App() {
     }
     const body = await resp.json();
     setPodcasts(body);
-    //   setCallId(body.call_id);
+    setSearching(false);
   };
 
   return (
     <div className="absolute inset-0 bg-gradient-to-r from-green-300 via-green-500 to-green-300">
       <div className="mx-auto max-w-2xl py-8">
         <main className="rounded-xl bg-white p-6">
-          {!callId && <Form onSubmit={handleSubmission} />}
-          {podcasts && <PodcastList podcasts={podcasts} />}
-          {callId && <Result callId={callId} selectedFile={selectedFile} />}
+          <Form onSubmit={handleSubmission} />
+          {searching && <Spinner />}
+          {podcasts && !searching && <PodcastList podcasts={podcasts} />}
         </main>
       </div>
     </div>
