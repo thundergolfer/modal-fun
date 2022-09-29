@@ -77,7 +77,7 @@ app_image = (
 )
 web_image = modal.DebianSlim().pip_install(["dacite"])
 search_image = modal.DebianSlim().pip_install(
-    ["scikit-learn~=0.24.2", "tqdm~=4.46.0", "numpy~=1.17.3", "dacite"]
+    ["scikit-learn~=0.24.2", "tqdm~=4.46.0", "numpy~=1.23.3", "dacite"]
 )
 
 stub = modal.Stub("whisper-pod-transcriber", image=app_image)
