@@ -480,15 +480,18 @@ def transcribe_podcast(name: str, podcast_id: str):
     # Most recent episodes
     episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
     temp_limit = 5  # TODO: Remove when basics are working
+    completed = []
     for result in process_episode.map(episodes[:temp_limit], order_outputs=False):
         print("Processed:")
         print(result.title)
+        completed.append(result.title)
 
     COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
     completion_marker_path = COMPLETED_DIR / f"{podcast_id}.txt"
     with open(completion_marker_path, "w") as f:
         f.write(str(utc_now()))
     print(f"Marked podcast {podcast_id} as recently transcribed.")
+    return completed  # Need to return something for function call polling to work.
 
 
 @stub.function(
