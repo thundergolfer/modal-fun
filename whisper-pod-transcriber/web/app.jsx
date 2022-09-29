@@ -182,15 +182,18 @@ function Form({ onSubmit }) {
       <div className="text-2xl font-semibold text-gray-700">
         Modal Podcast Transcriber
       </div>
-      <label>
-        <strong>Podcast:</strong>
+      <div class="w-3/4 flex flex-row">
+        <label>
+          <span class="pr-4"><strong>Podcast:</strong></span>
+        </label>
         <input
-          type="text"
-          value={podcastName}
-          onChange={onChange}
-          className="text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 cursor-pointer"
+            type="text"
+            value={podcastName}
+            onChange={onChange}
+            placeholder="Signals and Threads podcast"
+            className="flex-1 w-2/3 px-1 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 cursor-pointer"
         />
-      </label>
+      </div>
       <div>
         <button
           type="button"
