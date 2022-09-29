@@ -182,9 +182,9 @@ function Form({ onSubmit }) {
       <div className="text-2xl font-semibold text-gray-700">
         Modal Podcast Transcriber
       </div>
-      <div class="w-3/4 flex flex-row">
+      <div className="w-3/4 flex flex-row">
         <label>
-          <span class="pr-4"><strong>Podcast:</strong></span>
+          <span className="pr-4"><strong>Podcast:</strong></span>
         </label>
         <input
             type="text"
