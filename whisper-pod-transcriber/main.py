@@ -13,39 +13,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 import modal
 
+import config
 import podcast
 import search
-
-
-CACHE_DIR = "/cache"
-RAW_AUDIO_DIR = pathlib.Path(CACHE_DIR, "raw_audio")
-METADATA_DIR = pathlib.Path(CACHE_DIR, "metadata")
-COMPLETED_DIR = pathlib.Path(CACHE_DIR, "completed")
-TRANSCRIPTIONS_DIR = pathlib.Path(CACHE_DIR, "transcriptions")
-SEARCH_DIR = pathlib.Path(CACHE_DIR, "search")
-assets_path = pathlib.Path(__file__).parent / "web"
-podchaser_podcast_ids = {
-    "ezra_klein_nyt": 1582975,
-    "ezra_klein_vox": 82327,
-    "lex_fridman": 721928,
-    "The Joe Rogan Experience": 10829,
-}
-
-
-@dataclasses.dataclass
-class ModelSpec:
-    name: str
-    params: str
-    relative_speed: int  # Higher is faster
-
-
-supported_whisper_models = {
-    "tiny.en": ModelSpec(name="tiny.en", params="39M", relative_speed=32),
-    "base.en": ModelSpec(name="base.en", params="74M", relative_speed=16),
-    "small.en": ModelSpec(name="small.en", params="244M", relative_speed=6),
-    "medium.en": ModelSpec(name="medium.en", params="769M", relative_speed=2),
-    "large": ModelSpec(name="large", params="1550M", relative_speed=1),
-}
 
 
 volume = modal.SharedVolume().persist("dataset-cache-vol")
@@ -85,8 +55,8 @@ async def episodes():
     episodes_by_show = defaultdict(list)
     all_episodes = []
     episodes_content = ""
-    if METADATA_DIR.exists():
-        for file in METADATA_DIR.iterdir():
+    if config.METADATA_DIR.exists():
+        for file in config.METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
@@ -114,8 +84,10 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
     import dacite
 
     model_slug = "whisper-base-en"  # TODO: Hardcoded for now.
-    episode_metadata_path = METADATA_DIR / f"{episode_guid_hash}.json"
-    transcription_path = TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
+    episode_metadata_path = config.METADATA_DIR / f"{episode_guid_hash}.json"
+    transcription_path = (
+        config.TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
+    )
     with open(transcription_path, "r") as f:
         data = json.load(f)
     with open(episode_metadata_path, "r") as f:
@@ -172,8 +144,8 @@ async def podcast_transcripts_page(podcast_id: str):
     import dacite
 
     podcast_episodes = []
-    if METADATA_DIR.exists():
-        for file in METADATA_DIR.iterdir():
+    if config.METADATA_DIR.exists():
+        for file in config.METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
@@ -216,9 +188,9 @@ async def podcast_transcripts_page(podcast_id: str):
 
 
 def is_podcast_recently_transcribed(podcast_id: str):
-    if not COMPLETED_DIR.exists():
+    if not config.COMPLETED_DIR.exists():
         return False
-    completion_marker_path = COMPLETED_DIR / f"{podcast_id}.txt"
+    completion_marker_path = config.COMPLETED_DIR / f"{podcast_id}.txt"
     return completion_marker_path.exists()
 
 
@@ -240,8 +212,8 @@ async def podcasts_endpoint(request: Request):
 
 
 @stub.asgi(
-    mounts=[modal.Mount("/assets", local_dir=assets_path)],
-    shared_volumes={CACHE_DIR: volume},
+    mounts=[modal.Mount("/assets", local_dir=config.ASSETS_PATH)],
+    shared_volumes={config.CACHE_DIR: volume},
 )
 def fastapi_app():
     import fastapi.staticfiles
@@ -285,7 +257,7 @@ def search_podcast(name):
 
 @stub.function(
     image=search_image,
-    shared_volumes={CACHE_DIR: volume},
+    shared_volumes={config.CACHE_DIR: volume},
 )
 def index():
     import dacite
@@ -293,12 +265,12 @@ def index():
     from collections import defaultdict
 
     print("Starting transcript indexing process.")
-    SEARCH_DIR.mkdir(parents=True, exist_ok=True)
+    config.SEARCH_DIR.mkdir(parents=True, exist_ok=True)
 
     episodes = defaultdict(list)
     guid_hash_to_episodes = {}
-    if METADATA_DIR.exists():
-        for file in METADATA_DIR.iterdir():
+    if config.METADATA_DIR.exists():
+        for file in config.METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
@@ -308,8 +280,8 @@ def index():
     print(f"Loaded {len(guid_hash_to_episodes)} podcast episodes.")
 
     transcripts = {}
-    if TRANSCRIPTIONS_DIR.exists():
-        for file in TRANSCRIPTIONS_DIR.iterdir():
+    if config.TRANSCRIPTIONS_DIR.exists():
+        for file in config.TRANSCRIPTIONS_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
                 guid_hash = file.stem.split("-")[0]
@@ -336,7 +308,7 @@ def index():
         f"Matched {len(search_records)} transcripts against episode metadata records."
     )
 
-    filepath = pathlib.Path(SEARCH_DIR, "jall.json")
+    filepath = pathlib.Path(config.SEARCH_DIR, "jall.json")
     print(f"writing {filepath}")
     with open(filepath, "w") as f:
         json.dump(indexed_episodes, f)
@@ -346,14 +318,14 @@ def index():
     )
     X, v = search.calculate_tfidf_features(search_records)
     sim_svm = search.calculate_similarity_with_svm(X)
-    filepath = pathlib.Path(SEARCH_DIR, "sim_tfidf_svm.json")
+    filepath = pathlib.Path(config.SEARCH_DIR, "sim_tfidf_svm.json")
     print(f"writing {filepath}")
     with open(filepath, "w") as f:
         json.dump(sim_svm, f)
 
     print("calculate the search index to support search")
     search_dict = search.build_search_index(search_records, v)
-    filepath = pathlib.Path(SEARCH_DIR, "search.json")
+    filepath = pathlib.Path(config.SEARCH_DIR, "search.json")
     print(f"writing {filepath}")
     with open(filepath, "w") as f:
         json.dump(search_dict, f)
@@ -384,7 +356,7 @@ async def poll_results(call_id: str):
 
 @stub.function(
     image=app_image,
-    shared_volumes={CACHE_DIR: volume},
+    shared_volumes={config.CACHE_DIR: volume},
     concurrency_limit=2,
 )
 def transcribe_podcast(name: str, podcast_id: str):
@@ -398,8 +370,8 @@ def transcribe_podcast(name: str, podcast_id: str):
         print(result.title)
         completed.append(result.title)
 
-    COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
-    completion_marker_path = COMPLETED_DIR / f"{podcast_id}.txt"
+    config.COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
+    completion_marker_path = config.COMPLETED_DIR / f"{podcast_id}.txt"
     with open(completion_marker_path, "w") as f:
         f.write(str(utc_now()))
     print(f"Marked podcast {podcast_id} as recently transcribed.")
@@ -408,14 +380,14 @@ def transcribe_podcast(name: str, podcast_id: str):
 
 @stub.function(
     image=app_image,
-    shared_volumes={CACHE_DIR: volume},
+    shared_volumes={config.CACHE_DIR: volume},
     gpu=True,
     concurrency_limit=10,
 )
 def transcribe_episode(
     audio_filepath: pathlib.Path,
     result_path: pathlib.Path,
-    model: ModelSpec,
+    model: config.ModelSpec,
 ):
     import torch
     import whisper
@@ -430,28 +402,30 @@ def transcribe_episode(
 
 @stub.function(
     image=app_image,
-    shared_volumes={CACHE_DIR: volume},
+    shared_volumes={config.CACHE_DIR: volume},
 )
 def process_episode(episode: podcast.EpisodeMetadata):
-    RAW_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    TRANSCRIPTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
-    destination_path = RAW_AUDIO_DIR / episode.guid_hash
+    config.RAW_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    config.TRANSCRIPTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    config.METADATA_DIR.mkdir(parents=True, exist_ok=True)
+    destination_path = config.RAW_AUDIO_DIR / episode.guid_hash
     podcast.store_original_audio(
         url=episode.original_download_link,
         destination=destination_path,
     )
 
-    model = supported_whisper_models["base.en"]
+    model = config.supported_whisper_models["base.en"]
     model_slug = f"whisper-{model.name.replace('.', '-')}"
     print(f"Using the {model.name} model which has {model.params} parameters.")
 
-    metadata_path = METADATA_DIR / f"{episode.guid_hash}.json"
+    metadata_path = config.METADATA_DIR / f"{episode.guid_hash}.json"
     with open(metadata_path, "w") as f:
         json.dump(dataclasses.asdict(episode), f)
     print(f"Wrote episode metadata to {metadata_path}")
 
-    transcription_path = TRANSCRIPTIONS_DIR / f"{episode.guid_hash}-{model_slug}.json"
+    transcription_path = (
+        config.TRANSCRIPTIONS_DIR / f"{episode.guid_hash}-{model_slug}.json"
+    )
     if transcription_path.exists():
         print(
             f"Transcription already exists for '{episode.title}' with ID {episode.guid_hash}."
@@ -469,7 +443,7 @@ def process_episode(episode: podcast.EpisodeMetadata):
 @stub.function(
     image=app_image,
     secret=modal.ref("podchaser"),
-    shared_volumes={CACHE_DIR: volume},
+    shared_volumes={config.CACHE_DIR: volume},
 )
 def fetch_episodes(show_name: str, podcast_id: str, max_episodes=100):
     import hashlib
@@ -505,7 +479,7 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "transcribe":
         show_name = sys.argv[2]
-        podcast_id = podchaser_podcast_ids[show_name]
+        podcast_id = config.podchaser_podcast_ids[show_name]
         with stub.run() as app:
             print(f"Modal app ID -> {app.app_id}")
             transcribe_podcast(name=show_name, podcast_id=podcast_id)
