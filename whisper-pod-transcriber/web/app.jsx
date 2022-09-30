@@ -45,8 +45,6 @@ function Podcast({ podcast }) {
       throw new Error("An error occurred: " + resp.status);
     }
     const body = await resp.json();
-    console.log("Received response:");
-    console.log(body);
     // once the request is sent, update state again
     setIsSending(false);
     setCallId(body.call_id);
@@ -61,10 +59,19 @@ function Podcast({ podcast }) {
         disabled={true}
       >
         <div className="flex flex-row space-y-4">
-          <div className="mr-4">Waiting...</div>
-          <div>
-            <Result callId={callId} onFinished={setRecentlyTranscribed} />
-          </div>
+          {recentlyTranscribed ? (
+            <div className="mr-4">Waiting...</div>
+          ) : (
+            <div>
+              <Result
+                callId={callId}
+                onFinished={() => {
+                  setRecentlyTranscribed(true);
+                  setCallId(null);
+                }}
+              />
+            </div>
+          )}
         </div>
       </button>
     );
@@ -163,7 +170,18 @@ function Result({ callId, onFinished }) {
     return () => clearInterval(intervalId);
   }, [result]);
 
-  return <div>{result ? "Complete!" : <Spinner config={spinnerConfig} />}</div>;
+  return (
+    <div>
+      {result ? (
+        <span>Complete!</span>
+      ) : (
+        <div>
+          <span>Waiting...</span>
+          <Spinner config={spinnerConfig} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Form({ onSubmit }) {
