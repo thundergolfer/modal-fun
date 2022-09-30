@@ -63,7 +63,7 @@ function Podcast({ podcast }) {
         <div className="flex flex-row space-y-4">
           <div className="mr-4">Waiting...</div>
           <div>
-            <Result callId={callId} />
+            <Result callId={callId} onFinished={setRecentlyTranscribed} />
           </div>
         </div>
       </button>
