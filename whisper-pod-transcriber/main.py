@@ -254,18 +254,14 @@ def index():
             # Prepare records for JSON serialization
             indexed_episodes.append(dataclasses.asdict(idxd_episode))
 
-    print(
-        f"Matched {len(search_records)} transcripts against episode metadata records."
-    )
+    print(f"Matched {len(search_records)} transcripts to episode records.")
 
     filepath = pathlib.Path(config.SEARCH_DIR, "jall.json")
     print(f"writing {filepath}")
     with open(filepath, "w") as f:
         json.dump(indexed_episodes, f)
 
-    print(
-        "calc feature vectors for all transcripts, keeping track of most similar podcasts"
-    )
+    print("calc feature vectors for all transcripts, keeping track of similar podcasts")
     X, v = search.calculate_tfidf_features(search_records)
     sim_svm = search.calculate_similarity_with_svm(X)
     filepath = pathlib.Path(config.SEARCH_DIR, "sim_tfidf_svm.json")
@@ -324,8 +320,7 @@ def transcribe_podcast(podcast_id: str):
     episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
     completed = []
     for result in process_episode.map(episodes[:temp_limit], order_outputs=False):
-        print("Processed:")
-        print(result.title)
+        print(f"Processed episode '{result.title}'")
         completed.append(result.title)
 
     config.COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
