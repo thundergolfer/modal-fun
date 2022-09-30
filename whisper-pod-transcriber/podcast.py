@@ -10,6 +10,7 @@ from typing import NamedTuple, Optional, Union
 class EpisodeMetadata:
     # Unique ID of podcast this episode is associated with.
     podcast_id: Union[str, int]
+    podcast_title: Optional[str]
     # Title of podcast this episode is associated with.
     show: str  # TODO: Rename to `podcast_title`
     title: str
@@ -200,6 +201,26 @@ def fetch_episodes_data(gql, client, podcast_id, max_episodes=100) -> list[dict]
         if len(episodes) >= max_episodes:
             break
     return episodes
+
+
+def fetch_podcast_data(gql, client, podcast_id) -> dict:
+    podcast_metadata_query = gql(
+        """
+        query {{
+            podcast(identifier: {{id: "{podcast_id}", type: PODCHASER}}) {{
+                id,
+                title,
+                description,
+                webUrl,
+            }}
+        }}
+        """.format(
+            podcast_id=podcast_id,
+        )
+    )
+    print(f"Querying Podchaser for podcast with ID {podcast_id}.")
+    result = client.execute(podcast_metadata_query)
+    return result["podcast"]
 
 
 def sizeof_fmt(num, suffix="B") -> str:
