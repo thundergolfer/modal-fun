@@ -242,60 +242,6 @@ async def podcasts_endpoint(request: Request):
     return JSONResponse(content=podcasts_response)
 
 
-@web_app.get("/old")
-async def root(query: str = ""):
-    import dacite
-    import json
-    from collections import defaultdict
-
-    all_json = pathlib.Path(SEARCH_DIR, "jall.json")
-
-    all_episodes = []
-    if METADATA_DIR.exists():
-        for file in METADATA_DIR.iterdir():
-            with open(file, "r") as f:
-                data = json.load(f)
-                ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
-                all_episodes.append(ep)
-    print("load all indexed episodes")
-    with open(all_json, "r") as f:
-        items_data = json.load(f)
-        indexed_eps = [
-            dacite.from_dict(data_class=podcast.EpisodeMetadata, data=x)
-            for x in items_data
-        ]
-
-    search_results_html = ""
-    if query:
-        search_results = search_transcripts(items=indexed_eps, query=query)
-        list_items = []
-        for score, episode in search_results:
-            list_items.append(
-                f"""<li>
-                    <span>show: {episode.show}</span></br>
-                    <span>score: {score}</span></br>
-                    <span>title: {episode.title}</span></br>
-                    <span>url: {episode.episode_url}</span></br>
-                </li>"""
-            )
-        search_results_html = "\n".join(list_items)
-    else:
-        search_results_html = ""
-
-    content = f"""
-    <html>
-        <h1>Modal Transcriber!</h1>
-        <section>
-            <h4>Your query:</h4>
-            <h5>{query}</h5>
-            <h4>Your search results:</h4>
-            <ul>{search_results_html}</ul>
-        </section>
-    </html>
-    """
-    return HTMLResponse(content=content, status_code=200)
-
-
 @stub.asgi(
     mounts=[modal.Mount("/assets", local_dir=assets_path)],
     shared_volumes={CACHE_DIR: volume},
