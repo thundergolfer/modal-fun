@@ -176,16 +176,11 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
 async def podcast_transcripts_page(podcast_id: str):
     import dacite
 
-    # 1. Read all metadata files, filtering for podcast_id
-    # 3. Read all transcripts using guid and hardcoded model id
     podcast_episodes = []
     if METADATA_DIR.exists():
         for file in METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
-                # Hack: Some files in this directory aren't episode metadata
-                if isinstance(data, list):
-                    continue
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
                 if str(ep.podcast_id) == podcast_id:
                     podcast_episodes.append(ep)
@@ -392,9 +387,6 @@ def index():
         for file in METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
-                # Hack: Some files in this directory aren't episode metadata
-                if isinstance(data, list):
-                    continue
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
                 episodes[ep.show].append(ep)
                 guid_hash_to_episodes[ep.guid_hash] = ep
