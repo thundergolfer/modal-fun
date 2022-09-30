@@ -8,23 +8,37 @@ from typing import NamedTuple, Optional, Union
 
 @dataclasses.dataclass
 class EpisodeMetadata:
+    # Unique ID of podcast this episode is associated with.
     podcast_id: Union[str, int]
+    # Title of podcast this episode is associated with.
     show: str  # TODO: Rename to `podcast_title`
     title: str
-    publish_date: str  # The publish date of the episode as specified by the publisher
+    # The publish date of the episode as specified by the publisher
+    publish_date: str
+    # Plaintext description of episode. nb: has whitespace issues so not suitable in UI.
     description: str
+    # HTML markup description. Suitable for display in UI.
     html_description: str
-    guid: str  # The unique identifier of this episode within the context of the podcast
-    guid_hash: str  # Hash the guid because Podchaser app adopted a new shit format which isn't good for filenames, eg, gid://art19-episode-locator/V0/ycwWQomSBBS6eeJxkT_94I0WTMgR2fL9XNA7vWXD1Kc
-    episode_url: Optional[str]  # link to episode on Podchaser
+    # The unique identifier of this episode within the context of the podcast
+    guid: str
+    # Hash the guid into something appropriate for filenames.
+    guid_hash: str  
+    # Link to episode on Podchaser website.
+    episode_url: Optional[str]
+    # Link to audio file for episode. Typically an .mp3 file.
     original_download_link: str
 
 
 @dataclasses.dataclass
 class PodcastMetadata:
+    # Unique ID for a podcast
     id: str
+    # Title of podcast, eg. 'The Joe Rogan Experience'.
     title: str
+    # Plaintext description of episode. nb: has whitespace issues so not suitable in UI.
+    # TODO: Grab html_description as well.
     description: str
+    # Link to podcast on Podchaser website.
     web_url: str
 
 
@@ -42,6 +56,10 @@ def download_podcast_file(url: str) -> DownloadResult:
 
 
 def create_podchaser_client():
+    """
+    Use's Podchaser's graphql API to get an new access token and instantiate
+    a graphql client with it.
+    """
     from gql import gql, Client
     from gql.transport.aiohttp import AIOHTTPTransport
 
@@ -86,7 +104,8 @@ def create_podchaser_client():
     return Client(transport=transport, fetch_schema_from_transport=True)
 
 
-def search_podcast_name(gql, client, name, max_results=5):
+def search_podcast_name(gql, client, name, max_results=5) -> list[dict]:
+    """Search for a podcast by name/title. eg. 'Joe Rogan Experience' or 'Serial'."""
     podcasts = []
     has_more_pages = True
     current_page = 0
@@ -127,13 +146,9 @@ def search_podcast_name(gql, client, name, max_results=5):
     return podcasts
 
 
-def fetch_episodes_data(gql, client, podcast_id, max_episodes=100):
+def fetch_episodes_data(gql, client, podcast_id, max_episodes=100) -> list[dict]:
     """
-    NYT Episodes:
-    curl https://podbay.fm/api/podcast?slug=the-ezra-klein-show-280811&page=0&reverse=false&refresh=true | jq .
-
-    Vox.com era episodes:
-    curl https://podbay.fm/api/podcast?slug=the-ezra-klein-show&reverse=true&page=0 | jq .
+    Use the Podchaser API to grab a podcast's episodes.
     """
     max_episodes_per_request = 100  # Max allowed by API
     episodes = []
