@@ -28,9 +28,8 @@ function Podcast({ podcast }) {
   const sendRequest = React.useCallback(async () => {
     // don't send again while we are sending
     if (isSending) return;
-    // update state
+
     setIsSending(true);
-    // send the actual request
     console.log(`Transcribing ${podcast.title} ${podcast.id}`);
     const formData = new FormData();
     formData.append("podcast_name", podcast.title);
@@ -131,8 +130,6 @@ function Podcast({ podcast }) {
 }
 
 function PodcastList({ podcasts }) {
-  console.log("podcasts:");
-  console.log(podcasts);
   const listItems = podcasts.map((pod) => (
     <li key={pod.id}>
       <Podcast podcast={pod} />
@@ -192,7 +189,6 @@ function Form({ onSubmit }) {
   };
 
   const handleSubmit = async (event) => {
-    console.log("Handling submit");
     await onSubmit(podcastName);
   };
 
@@ -236,7 +232,6 @@ function App() {
   const handleSubmission = async (podcastName) => {
     const formData = new FormData();
     formData.append("podcast", podcastName);
-    console.log(podcastName);
     setSearching(true);
     const resp = await fetch("/podcasts", {
       method: "POST",
