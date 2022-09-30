@@ -3,16 +3,10 @@ whisper-pod-transcriber uses OpenAI's Whisper modal to do speech-to-text transcr
 of podcasts.
 """
 import datetime
-from dataclasses import dataclass
 import dataclasses
-from importlib.resources import path
 import json
-import os
 import pathlib
-from re import M
 import sys
-
-from typing import Any, NamedTuple
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
