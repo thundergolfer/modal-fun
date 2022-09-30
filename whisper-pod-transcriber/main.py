@@ -69,7 +69,6 @@ app_image = (
         ]
     )
 )
-web_image = modal.Image.debian_slim().pip_install(["dacite"])
 search_image = modal.Image.debian_slim().pip_install(
     ["scikit-learn~=0.24.2", "tqdm~=4.46.0", "numpy~=1.23.3", "dacite"]
 )
