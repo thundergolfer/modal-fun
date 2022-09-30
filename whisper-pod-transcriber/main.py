@@ -4,6 +4,7 @@ of podcasts.
 """
 import datetime
 import dataclasses
+from email.base64mime import body_decode
 import json
 import pathlib
 import sys
@@ -17,6 +18,7 @@ import modal
 import config
 import podcast
 import search
+import web
 
 
 volume = modal.SharedVolume().persist("dataset-cache-vol")
@@ -61,41 +63,35 @@ def create_transcript_path(
     return config.TRANSCRIPTIONS_DIR / f"{guid_hash}-{model_slug}.json"
 
 
-@web_app.get("/episodes")
-async def episodes():
+@web_app.get("/all")
+async def all_transcripts():
     import dacite
     from collections import defaultdict
 
     episodes_by_show = defaultdict(list)
-    all_episodes = []
-    episodes_content = ""
     if config.METADATA_DIR.exists():
         for file in config.METADATA_DIR.iterdir():
             with open(file, "r") as f:
                 data = json.load(f)
                 ep = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=data)
                 episodes_by_show[ep.show].append(ep)
-                all_episodes.append(ep)
 
+    body = web.html_all_transcripts_header()
     for show, episodes_by_show in episodes_by_show.items():
-        episodes_content += f"<h4>{show}</h4>\n"
-        episodes_content += "\n<ul>"
-        for ep in episodes_by_show:
-            episodes_content += f"\n<li>{ep.title} - {ep.publish_date}</li>"
-        episodes_content += "\n</ul>"
-    content = f"""
-    <html>
-        <h1>Modal Transcriber!</h1>
-        <h3>Transcribed episodes!</h3>
-        {episodes_content}
-    </html>
-    """
+        episode_part = f"""<div class="font-bold text-center text-green-500 text-xl mt-6">{show}</div>"""
+        episode_part += web.html_episode_list(episodes_by_show)
+        body += episode_part
+    content = web.html_page(
+        title="Modal Podcast Transcriber | All Transcripts", body=body
+    )
     return HTMLResponse(content=content, status_code=200)
 
 
 @web_app.get("/transcripts/{podcast_id}/{episode_guid_hash}")
 async def episode_transcript_page(podcast_id: str, episode_guid_hash):
     import dacite
+
+    _pod_id = podcast_id  # TODO(Jonathon): Check episode matches podcast ID.
 
     episode_metadata_path = config.METADATA_DIR / f"{episode_guid_hash}.json"
     transcription_path = create_transcript_path(episode_guid_hash)
@@ -105,48 +101,12 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
         metadata = json.load(f)
         episode = dacite.from_dict(data_class=podcast.EpisodeMetadata, data=metadata)
 
-    segments_ul_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
-    for segment in data["segments"]:
-        segment_li = f"""<li class="px-6 py-2 border-b border-gray-200 w-full rounded-t-lg">
-            {segment["text"]}
-        </li>
-        """
-        segments_ul_html += segment_li
-    segments_ul_html += "</ul>"
-    episode_description_html = episode.html_description.replace(
-        "<p>", "<p class='py-1'>"
+    segments_ul_html = web.html_transcript_list(data["segments"])
+    episode_header_html = web.html_episode_header(episode)
+    body = episode_header_html + segments_ul_html
+    content = web.html_page(
+        title="Modal Podcast Transcriber | Episode Transcript", body=body
     )
-    content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Modal Podcast Transcriber | Episode Transcript</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <!-- Favicon -->
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔊</text></svg>">
-    </head>
-
-    <body class="bg-gray-50">
-        <div class="mx-auto max-w-4xl py-8 rounded overflow-hidden shadow-lg">
-            <div class="px-6 py-4">
-                <div class="font-bold text-l text-green-500 mb-2">{episode.show}</div>
-                <div class="font-bold text-xl mb-2">{episode.title}</div>
-                <div class="text-gray-700 text-sm py-4">
-                    {episode_description_html}
-                </div>
-            </div>
-        </div>
-        <div class="mx-auto max-w-4xl py-8">
-            <div class="font-bold text-xl text-blue-500 mb-2">Transcript</div>
-            <div>
-                {segments_ul_html}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
     return HTMLResponse(content=content, status_code=200)
 
 
@@ -156,28 +116,7 @@ async def podcast_transcripts_page(podcast_id: str):
 
     pod_metadata_path = config.PODCAST_METADATA_DIR / f"{podcast_id}.json"
     if not pod_metadata_path.exists():
-        content = f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>Modal Podcast Transcriber | 404</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <!-- Favicon -->
-            <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔊</text></svg>">
-        </head>
-
-        <body class="bg-gray-50">
-            <div className="mx-auto max-w-md py-16">
-                <div class="flex justify-center">
-                    <h3>Sorry, this podcast hasn't been processed yet. Head back to the home page.</h3>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        return HTMLResponse(content=content, status_code=404)
+        return HTMLResponse(content=web.html_podcast_404_page(), status_code=404)
     else:
         with open(pod_metadata_path, "r") as f:
             data = json.load(f)
@@ -185,20 +124,7 @@ async def podcast_transcripts_page(podcast_id: str):
                 data_class=podcast.PodcastMetadata, data=data
             )
 
-    podcast_description_html = pod_metadata.html_description.replace(
-        "<p>", "<p class='py-1'>"
-    )
-    podcast_header_html = f"""
-    <div class="mx-auto max-w-4xl mt-4 py-8 rounded overflow-hidden shadow-lg">
-        <div class="px-6 py-4">
-            <div class="font-bold text-xl">{pod_metadata.title}</div>
-            <div class="text-gray-700 text-md">
-                {podcast_description_html}
-            </div>
-        </div>
-    </div>
-    """
-
+    podcast_header_html = web.html_podcast_header(pod_metadata)
     podcast_episodes = []
     if config.METADATA_DIR.exists():
         for file in config.METADATA_DIR.iterdir():
@@ -208,37 +134,9 @@ async def podcast_transcripts_page(podcast_id: str):
                 if str(ep.podcast_id) == podcast_id:
                     podcast_episodes.append(ep)
 
-    transcript_list_html = """<ul class="bg-white rounded-lg border border-gray-200 w-384 text-gray-900">"""
-    for ep in podcast_episodes:
-        episode_li = f"""<li class="px-6 py-2 border-b border-gray-200 w-full rounded-t-lg">
-            <a href="/transcripts/{ep.podcast_id}/{ep.guid_hash}" class="text-blue-700 no-underline hover:underline">
-                {ep.title}
-            </a> | {ep.publish_date}
-        </li>
-        """
-        transcript_list_html += episode_li
-    transcript_list_html += "</ul>"
-
-    content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Modal Podcast Transcriber | Transcripts</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <!-- Favicon -->
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔊</text></svg>">
-    </head>
-
-    <body class="bg-gray-50">
-        {podcast_header_html}
-        <div class="mx-auto max-w-4xl py-8">
-            {transcript_list_html}
-        </div>
-    </body>
-    </html>
-    """
+    transcript_list_html = web.html_episode_list(podcast_episodes)
+    body = podcast_header_html + transcript_list_html
+    content = web.html_page(title="Modal Podcast Transcriber | Transcripts", body=body)
     return HTMLResponse(content=content, status_code=200)
 
 
