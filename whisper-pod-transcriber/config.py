@@ -16,6 +16,7 @@ RAW_AUDIO_DIR = pathlib.Path(CACHE_DIR, "raw_audio")
 # Stores metadata of individual podcast episodes as JSON.
 # nb: Should probably be called EPISODES_METADATA_DIR.
 METADATA_DIR = pathlib.Path(CACHE_DIR, "metadata")
+PODCAST_METADATA_DIR = pathlib.Path(CACHE_DIR, "podcast_metadata")
 # Crude boolean marker of a previously processed podcast.
 COMPLETED_DIR = pathlib.Path(CACHE_DIR, "completed")
 # Completed episode transcriptions. Stored as flat files with
@@ -33,6 +34,8 @@ podchaser_podcast_ids = {
     "The Joe Rogan Experience": 10829,
 }
 
+# Remove when CPU processing works, or when GPUs plummet in cost.
+transcripts_per_podcast_limit = 5
 
 supported_whisper_models = {
     "tiny.en": ModelSpec(name="tiny.en", params="39M", relative_speed=32),

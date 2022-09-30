@@ -7,6 +7,7 @@ import dataclasses
 import json
 import pathlib
 import sys
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -47,6 +48,19 @@ stub = modal.Stub("whisper-pod-transcriber", image=app_image)
 web_app = FastAPI()
 
 
+def utc_now() -> datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def create_transcript_path(
+    guid_hash: str, model: Optional[config.ModelSpec] = None
+) -> pathlib.Path:
+    if model is None:
+        model = config.supported_whisper_models["base.en"]  # Assumption
+    model_slug = f"whisper-{model.name.replace('.', '-')}"
+    return config.TRANSCRIPTIONS_DIR / f"{guid_hash}-{model_slug}.json"
+
+
 @web_app.get("/episodes")
 async def episodes():
     import dacite
@@ -83,11 +97,8 @@ async def episodes():
 async def episode_transcript_page(podcast_id: str, episode_guid_hash):
     import dacite
 
-    model_slug = "whisper-base-en"  # TODO: Hardcoded for now.
     episode_metadata_path = config.METADATA_DIR / f"{episode_guid_hash}.json"
-    transcription_path = (
-        config.TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
-    )
+    transcription_path = create_transcript_path(episode_guid_hash)
     with open(transcription_path, "r") as f:
         data = json.load(f)
     with open(episode_metadata_path, "r") as f:
@@ -143,6 +154,51 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
 async def podcast_transcripts_page(podcast_id: str):
     import dacite
 
+    pod_metadata_path = config.PODCAST_METADATA_DIR / f"{podcast_id}.json"
+    if not pod_metadata_path.exists():
+        content = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Modal Podcast Transcriber | 404</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <!-- Favicon -->
+            <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔊</text></svg>">
+        </head>
+
+        <body class="bg-gray-50">
+            <div className="mx-auto max-w-md py-16">
+                <div class="flex justify-center">
+                    <h3>Sorry, this podcast hasn't been processed yet. Head back to the home page.</h3>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=content, status_code=404)
+    else:
+        with open(pod_metadata_path, "r") as f:
+            data = json.load(f)
+            pod_metadata = dacite.from_dict(
+                data_class=podcast.PodcastMetadata, data=data
+            )
+
+    podcast_description_html = pod_metadata.html_description.replace(
+        "<p>", "<p class='py-1'>"
+    )
+    podcast_header_html = f"""
+    <div class="mx-auto max-w-4xl mt-4 py-8 rounded overflow-hidden shadow-lg">
+        <div class="px-6 py-4">
+            <div class="font-bold text-xl">{pod_metadata.title}</div>
+            <div class="text-gray-700 text-md">
+                {podcast_description_html}
+            </div>
+        </div>
+    </div>
+    """
+
     podcast_episodes = []
     if config.METADATA_DIR.exists():
         for file in config.METADATA_DIR.iterdir():
@@ -157,7 +213,7 @@ async def podcast_transcripts_page(podcast_id: str):
         episode_li = f"""<li class="px-6 py-2 border-b border-gray-200 w-full rounded-t-lg">
             <a href="/transcripts/{ep.podcast_id}/{ep.guid_hash}" class="text-blue-700 no-underline hover:underline">
                 {ep.title}
-            </a> | {ep.show}
+            </a> | {ep.publish_date}
         </li>
         """
         transcript_list_html += episode_li
@@ -176,10 +232,9 @@ async def podcast_transcripts_page(podcast_id: str):
     </head>
 
     <body class="bg-gray-50">
-        <div className="mx-auto max-w-md py-16">
-            <div class="flex justify-center">
-                {transcript_list_html}
-            </div>
+        {podcast_header_html}
+        <div class="mx-auto max-w-4xl py-8">
+            {transcript_list_html}
         </div>
     </body>
     </html>
@@ -223,10 +278,6 @@ def fastapi_app():
     return web_app
 
 
-def utc_now() -> datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
-
-
 @stub.function(schedule=modal.Period(hours=4))
 def refresh_index():
     print(f"Running scheduled index refresh at {utc_now()}")
@@ -249,6 +300,7 @@ def search_podcast(name):
             id=pod["id"],
             title=pod["title"],
             description=pod["description"],
+            html_description=pod["htmlDescription"],
             web_url=pod["webUrl"],
         )
         for pod in podcasts_raw
@@ -333,11 +385,9 @@ def index():
 
 @web_app.post("/transcribe")
 async def transcribe_job(request: Request):
-    # Use aio_lookup since we're in an async context.
     form = await request.form()
-    pod_name = form["podcast_name"]
     pod_id = form["podcast_id"]
-    call = transcribe_podcast.submit(name=pod_name, podcast_id=pod_id)
+    call = transcribe_podcast.submit(podcast_id=pod_id)
     return {"call_id": call.object_id}
 
 
@@ -357,13 +407,23 @@ async def poll_results(call_id: str):
 @stub.function(
     image=app_image,
     shared_volumes={config.CACHE_DIR: volume},
+    secret=modal.ref("podchaser"),
     concurrency_limit=2,
 )
-def transcribe_podcast(name: str, podcast_id: str):
-    episodes = fetch_episodes(show_name=name, podcast_id=podcast_id)
+def transcribe_podcast(podcast_id: str):
+    from gql import gql
+
+    pod_metadata: podcast.PodcastMetadata = podcast.fetch_podcast(gql, podcast_id)
+    metadata_path = config.PODCAST_METADATA_DIR / f"{podcast_id}.json"
+    with open(metadata_path, "w") as f:
+        json.dump(dataclasses.asdict(pod_metadata), f)
+    print(f"Wrote podcast metadata to {metadata_path}")
+
+    temp_limit = config.transcripts_per_podcast_limit
+    print(f"Fetching {temp_limit} podcast episodes to transcribe.")
+    episodes = fetch_episodes(show_name=pod_metadata.title, podcast_id=podcast_id)
     # Most recent episodes
     episodes.sort(key=lambda ep: ep.publish_date, reverse=True)
-    temp_limit = 5  # TODO: Remove when basics are working
     completed = []
     for result in process_episode.map(episodes[:temp_limit], order_outputs=False):
         print("Processed:")
@@ -415,7 +475,6 @@ def process_episode(episode: podcast.EpisodeMetadata):
     )
 
     model = config.supported_whisper_models["base.en"]
-    model_slug = f"whisper-{model.name.replace('.', '-')}"
     print(f"Using the {model.name} model which has {model.params} parameters.")
 
     metadata_path = config.METADATA_DIR / f"{episode.guid_hash}.json"
@@ -423,9 +482,7 @@ def process_episode(episode: podcast.EpisodeMetadata):
         json.dump(dataclasses.asdict(episode), f)
     print(f"Wrote episode metadata to {metadata_path}")
 
-    transcription_path = (
-        config.TRANSCRIPTIONS_DIR / f"{episode.guid_hash}-{model_slug}.json"
-    )
+    transcription_path = create_transcript_path(episode.guid_hash, model)
     if transcription_path.exists():
         print(
             f"Transcription already exists for '{episode.title}' with ID {episode.guid_hash}."
@@ -457,6 +514,7 @@ def fetch_episodes(show_name: str, podcast_id: str, max_episodes=100):
     episodes = [
         podcast.EpisodeMetadata(
             podcast_id=podcast_id,
+            podcast_title=show_name,
             show=show_name,
             title=ep["title"],
             publish_date=ep["airDate"],
@@ -482,7 +540,7 @@ if __name__ == "__main__":
         podcast_id = config.podchaser_podcast_ids[show_name]
         with stub.run() as app:
             print(f"Modal app ID -> {app.app_id}")
-            transcribe_podcast(name=show_name, podcast_id=podcast_id)
+            transcribe_podcast(podcast_id=podcast_id)
     elif cmd == "serve":
         stub.serve()
     elif cmd == "index":

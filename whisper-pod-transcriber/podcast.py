@@ -37,8 +37,8 @@ class PodcastMetadata:
     # Title of podcast, eg. 'The Joe Rogan Experience'.
     title: str
     # Plaintext description of episode. nb: has whitespace issues so not suitable in UI.
-    # TODO: Grab html_description as well.
     description: str
+    html_description: str
     # Link to podcast on Podchaser website.
     web_url: str
 
@@ -132,6 +132,7 @@ def search_podcast_name(gql, client, name, max_results=5) -> list[dict]:
                     id,
                     title,
                     description,
+                    htmlDescription,
                     webUrl,
                 }}
             }}
@@ -211,6 +212,7 @@ def fetch_podcast_data(gql, client, podcast_id) -> dict:
                 id,
                 title,
                 description,
+                htmlDescription,
                 webUrl,
             }}
         }}
@@ -221,6 +223,18 @@ def fetch_podcast_data(gql, client, podcast_id) -> dict:
     print(f"Querying Podchaser for podcast with ID {podcast_id}.")
     result = client.execute(podcast_metadata_query)
     return result["podcast"]
+
+
+def fetch_podcast(gql, podcast_id: str) -> PodcastMetadata:
+    client = create_podchaser_client()
+    data = fetch_podcast_data(gql=gql, client=client, podcast_id=podcast_id)
+    return PodcastMetadata(
+        id=data["id"],
+        title=data["title"],
+        description=data["description"],
+        html_description=data["htmlDescription"],
+        web_url=data["webUrl"],
+    )
 
 
 def sizeof_fmt(num, suffix="B") -> str:
