@@ -264,28 +264,6 @@ def refresh_index():
     index()
 
 
-def search_transcripts(query: str, items: list[podcast.EpisodeMetadata]):
-    query_parts = query.lower().strip().split()  # split by spaces
-    search_json = pathlib.Path(SEARCH_DIR, "search.json")
-
-    print("load search dictionary")
-    with open(search_json, "r") as f:
-        search_dict = json.load(f)
-
-    n = len(items)
-    scores = []
-    for i, sd in enumerate(search_dict):
-        score = sum(sd.get(q, 0) for q in query_parts)
-        if score == 0:
-            continue  # no match whatsoever, don't include
-        score += (
-            1.0 * (n - i) / n
-        )  # give a small boost to more recent episodes (low index)
-        scores.append((score, items[i]))
-    scores.sort(reverse=True, key=lambda x: x[0])  # descending
-    return scores
-
-
 @stub.function(
     image=app_image,
     secret=modal.ref("podchaser"),

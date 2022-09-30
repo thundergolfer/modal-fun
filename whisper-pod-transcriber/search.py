@@ -1,11 +1,37 @@
 import dataclasses
+import pathlib
 from typing import Any
+
+import podcast
 
 
 @dataclasses.dataclass
 class SearchRecord:
     title: str
     text: str
+
+
+def search_transcripts(
+    search_dict_path: pathlib.Path, query: str, items: list[podcast.EpisodeMetadata]
+):
+    query_parts = query.lower().strip().split()
+    print(f"loading search dictionary from {search_dict_path}")
+    with open(search_dict_path, "r") as f:
+        search_dict = json.load(f)
+
+    n = len(items)
+    scores = []
+    for i, sd in enumerate(search_dict):
+        score = sum(sd.get(q, 0) for q in query_parts)
+        if score == 0:
+            continue  # no match whatsoever, don't include
+        score += (
+            1.0 * (n - i) / n
+        )  # give a small boost to more recent episodes (low index)
+        scores.append((score, items[i]))
+    # Sort descending, best scores first.
+    scores.sort(reverse=True, key=lambda x: x[0])
+    return scores
 
 
 def calculate_tfidf_features(
