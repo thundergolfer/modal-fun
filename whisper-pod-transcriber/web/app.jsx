@@ -157,13 +157,14 @@ function Result({ callId, onFinished }) {
       return;
     }
 
+    const delay = 5000; // ms. Podcasts will take a while to transcribe.
     const _intervalID = setInterval(async () => {
       const resp = await fetch(`/result/${callId}`);
       if (resp.status === 200) {
         setResult(await resp.json());
         onFinished(true);
       }
-    }, 1000);
+    }, delay);
 
     setIntervalId(_intervalID);
 
