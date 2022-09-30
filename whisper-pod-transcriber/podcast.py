@@ -22,7 +22,7 @@ class EpisodeMetadata:
     # The unique identifier of this episode within the context of the podcast
     guid: str
     # Hash the guid into something appropriate for filenames.
-    guid_hash: str  
+    guid_hash: str
     # Link to episode on Podchaser website.
     episode_url: Optional[str]
     # Link to audio file for episode. Typically an .mp3 file.
@@ -105,45 +105,45 @@ def create_podchaser_client():
 
 
 def search_podcast_name(gql, client, name, max_results=5) -> list[dict]:
-    """Search for a podcast by name/title. eg. 'Joe Rogan Experience' or 'Serial'."""
-    podcasts = []
-    has_more_pages = True
+    """
+    Search for a podcast by name/title. eg. 'Joe Rogan Experience' or 'Serial'.
+
+    This method does not paginate queries because 100s of search results is not
+    useful in this application.
+    """
+    if max_results > 100:
+        raise ValueError(
+            f"A maximum of 100 results is supported, but {max_results} results were requested."
+        )
     current_page = 0
-    # TODO: Remove pagination. Just need one request.
     max_episodes_per_request = max_results
-    while has_more_pages:
-        search_podcast_name_query = gql(
-            """
-            query {{
-                podcasts(searchTerm: "{name}", first: {max_episodes_per_request}, page: {current_page}) {{
-                    paginatorInfo {{
-                        currentPage,
-                        hasMorePages,
-                        lastPage,
-                    }},
-                    data {{
-                        id,
-                        title,
-                        description,
-                        webUrl,
-                    }}
+    search_podcast_name_query = gql(
+        """
+        query {{
+            podcasts(searchTerm: "{name}", first: {max_episodes_per_request}, page: {current_page}) {{
+                paginatorInfo {{
+                    currentPage,
+                    hasMorePages,
+                    lastPage,
+                }},
+                data {{
+                    id,
+                    title,
+                    description,
+                    webUrl,
                 }}
             }}
-            """.format(
-                name=name,
-                max_episodes_per_request=max_episodes_per_request,
-                current_page=current_page,
-            )
+        }}
+        """.format(
+            name=name,
+            max_episodes_per_request=max_episodes_per_request,
+            current_page=current_page,
         )
-        print(f"Querying Podchaser for podcasts. Current page: {current_page}.")
-        result = client.execute(search_podcast_name_query)
-        has_more_pages = result["podcasts"]["paginatorInfo"]["hasMorePages"]
-        podcasts_in_page = result["podcasts"]["data"]
-        podcasts.extend(podcasts_in_page)
-        if len(podcasts) >= max_results:
-            return podcasts[:max_results]
-        current_page += 1
-    return podcasts
+    )
+    print(f"Querying Podchaser for podcasts matching query '{name}'.")
+    result = client.execute(search_podcast_name_query)
+    podcasts_in_page = result["podcasts"]["data"]
+    return podcasts_in_page
 
 
 def fetch_episodes_data(gql, client, podcast_id, max_episodes=100) -> list[dict]:
@@ -226,5 +226,4 @@ def store_original_audio(
     print(f"Downloaded {humanized_bytes_str} episode from URL.")
     with open(destination, "wb") as f:
         f.write(podcast_download_result.data)
-
     print(f"Stored audio episode at {destination}.")

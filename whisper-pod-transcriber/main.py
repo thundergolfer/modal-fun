@@ -119,6 +119,7 @@ async def episodes():
 @web_app.get("/transcripts/{podcast_id}/{episode_guid_hash}")
 async def episode_transcript_page(podcast_id: str, episode_guid_hash):
     import dacite
+
     model_slug = "whisper-base-en"  # TODO: Hardcoded for now.
     episode_metadata_path = METADATA_DIR / f"{episode_guid_hash}.json"
     transcription_path = TRANSCRIPTIONS_DIR / f"{episode_guid_hash}-{model_slug}.json"
@@ -136,7 +137,9 @@ async def episode_transcript_page(podcast_id: str, episode_guid_hash):
         """
         segments_ul_html += segment_li
     segments_ul_html += "</ul>"
-    episode_description_html = episode.html_description.replace('<p>', '<p class=\'py-1\'>')
+    episode_description_html = episode.html_description.replace(
+        "<p>", "<p class='py-1'>"
+    )
     content = f"""
     <!DOCTYPE html>
     <html lang="en">
