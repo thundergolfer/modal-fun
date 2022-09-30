@@ -308,13 +308,6 @@ def fastapi_app():
     return web_app
 
 
-def _write_json(obj, filepath, msg="") -> None:
-    suffix = f"; {msg}" if msg else ""
-    print(f"writing {filepath}{suffix}")
-    with open(filepath, "w") as f:
-        json.dump(obj, f)
-
-
 def utc_now() -> datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
@@ -422,24 +415,27 @@ def index():
         f"Matched {len(search_records)} transcripts against episode metadata records."
     )
 
-    _write_json(indexed_episodes, pathlib.Path(SEARCH_DIR, "jall.json"))
+    filepath = pathlib.Path(SEARCH_DIR, "jall.json")
+    print(f"writing {filepath}")
+    with open(filepath, "w") as f:
+        json.dump(indexed_episodes, f)
 
     print(
-        "calculate feature vectors for all transcripts and keep track of most similar other episodes"
+        "calc feature vectors for all transcripts, keeping track of most similar podcasts"
     )
     X, v = search.calculate_tfidf_features(search_records)
     sim_svm = search.calculate_similarity_with_svm(X)
-    _write_json(
-        sim_svm,
-        pathlib.Path(SEARCH_DIR, "sim_tfidf_svm.json"),
-    )
+    filepath = pathlib.Path(SEARCH_DIR, "sim_tfidf_svm.json")
+    print(f"writing {filepath}")
+    with open(filepath, "w") as f:
+        json.dump(sim_svm, f)
 
     print("calculate the search index to support search")
     search_dict = search.build_search_index(search_records, v)
-    _write_json(
-        search_dict,
-        pathlib.Path(SEARCH_DIR, "search.json"),
-    )
+    filepath = pathlib.Path(SEARCH_DIR, "search.json")
+    print(f"writing {filepath}")
+    with open(filepath, "w") as f:
+        json.dump(search_dict, f)
 
 
 @web_app.post("/transcribe")
