@@ -56,7 +56,7 @@ supported_whisper_models = {
 
 volume = modal.SharedVolume().persist("dataset-cache-vol")
 app_image = (
-    modal.DebianSlim()
+    modal.Image.debian_slim()
     .pip_install(
         [
             "https://github.com/openai/whisper/archive/5d8d3e75a4826fe5f01205d81c3017a805fc2bf9.tar.gz",
@@ -75,8 +75,8 @@ app_image = (
         ]
     )
 )
-web_image = modal.DebianSlim().pip_install(["dacite"])
-search_image = modal.DebianSlim().pip_install(
+web_image = modal.Image.debian_slim().pip_install(["dacite"])
+search_image = modal.Image.debian_slim().pip_install(
     ["scikit-learn~=0.24.2", "tqdm~=4.46.0", "numpy~=1.23.3", "dacite"]
 )
 

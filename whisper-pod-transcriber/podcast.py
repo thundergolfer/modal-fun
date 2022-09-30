@@ -44,6 +44,7 @@ class PodcastMetadata:
 
 class DownloadResult(NamedTuple):
     data: bytes
+    # Helpful to store and transmit when uploading to cloud bucket.
     content_type: str
 
 
