@@ -3,6 +3,7 @@ import io
 import random
 import string
 import sys
+import time
 
 import modal
 
@@ -10,6 +11,10 @@ stub = modal.Stub("big-data-csv")
 image = modal.Image.debian_slim().pip_install(
     [
         "boto3",
+        "dask",
+        "pandas",
+        "pyarrow",
+        "s3fs",
     ]
 )
 
@@ -40,7 +45,9 @@ def fake_csv_data(size_mb: int):
     }
     print(f"Producing {required_entries} lines of (email, password) CSV data.")
     for dom in random.choices(
-        population=list(domains.keys()), weights=list(domains.values()), k=required_entries
+        population=list(domains.keys()),
+        weights=list(domains.values()),
+        k=required_entries,
     ):
         local_part = random_alphanum_str(min_len=5, max_len=25)
         email = f"{local_part}@{dom}"
@@ -52,7 +59,7 @@ def fake_csv_data(size_mb: int):
 
 
 @stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
-def upload_part(bucket, key, upload_id, part_num):
+def upload_part(bucket, key, upload_id, part_num, size_mb):
     import boto3
 
     s3_resource = boto3.resource("s3")
@@ -64,7 +71,7 @@ def upload_part(bucket, key, upload_id, part_num):
         part_num,
     )
 
-    part_data = fake_csv_data(size_mb=100)
+    part_data = fake_csv_data(size_mb=size_mb)
     print(f"Part {part_num} is {sys.getsizeof(part_data)} bytes")
     part_response = upload_part.upload(
         Body=part_data,
@@ -73,7 +80,7 @@ def upload_part(bucket, key, upload_id, part_num):
 
 
 @stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
-def upload_fake_csv():
+def upload_fake_csv(desired_mb: int):
     import boto3
 
     bucket_name = "temp-big-data-csv"
@@ -82,7 +89,7 @@ def upload_fake_csv():
 
     print(boto3.client("sts").get_caller_identity())
 
-    key = "fake.csv"
+    key = f"{desired_mb}_mb.csv"
     multipart_upload = s3_client.create_multipart_upload(
         ACL="private",
         Bucket=bucket_name,
@@ -91,14 +98,12 @@ def upload_fake_csv():
 
     upload_id = multipart_upload["UploadId"]
     print(f"Upload ID: {upload_id}")
+    upload_size_mb = 100  # Constrained by how fast Python can produce fake data?
+    num_uploads = desired_mb // upload_size_mb
+
     uploads = [
-        (
-            bucket_name,
-            key,
-            upload_id,
-            i,
-        )
-        for i in range(1, 11)
+        (bucket_name, key, upload_id, i, upload_size_mb)
+        for i in range(1, num_uploads + 1)
     ]
 
     parts = []
@@ -108,7 +113,7 @@ def upload_fake_csv():
     print("Completing upload...")
     result = s3_client.complete_multipart_upload(
         Bucket=bucket_name,
-        Key="fake.csv",
+        Key=key,
         MultipartUpload={"Parts": parts},
         UploadId=multipart_upload["UploadId"],
     )
@@ -116,6 +121,72 @@ def upload_fake_csv():
     print("✅ Done")
 
 
+@stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
+def count_by_filter_slow(csv_file_path) -> int:
+    import pandas as pd
+
+    count = 0
+    with pd.read_csv(
+        csv_file_path,
+        chunksize=10_000,
+        engine="c",
+        delimiter=" ",
+        quotechar="|",
+        quoting=csv.QUOTE_MINIMAL,
+        names=["email", "password"],
+        header=None,
+    ) as reader:
+        for i, chunk in enumerate(reader):
+            count += chunk["email"].str.endswith("@gmail.com").count()
+            if i % 100 == 0:
+                print(f"Processed {i} chunks,")
+    return count
+
+
+@stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
+def process_block(i, df):
+    partition = df.partitions[i]
+    count = (
+        partition[partition["email"].str.endswith("@gmail.com")]["email"]
+        .count()
+        .compute()
+    )
+    print(f"Counted {count} in csv partition {i}")
+    return count
+
+
+@stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
+def count_by_filter_fast(bucket: str, key: str) -> int:
+    import boto3
+    import pandas as pd
+    from dask.dataframe.io import read_csv
+
+    s3 = boto3.client("s3")
+    response = s3.head_object(Bucket=bucket, Key=key)
+    size = response["ContentLength"]
+    print(f"CSV file is {size} bytes")
+
+    csv_file_path = f"s3://{bucket}/{key}"
+    df = read_csv(
+        urlpath=csv_file_path,
+        blocksize="128 MiB",
+        sep=" ",
+        names=["email", "password"],
+    )
+
+    print(f"Created dataframe has {df.npartitions} partitions.")
+    return sum(
+        process_block.starmap(
+            ((i, df) for i in range(df.npartitions)), order_outputs=False
+        )
+    )
+
+
 if __name__ == "__main__":
     with stub.run():
-        upload_fake_csv()
+        # upload_fake_csv(desired_mb=10_000)
+        print("Running fast...")
+        start = time.time()
+        count = count_by_filter_fast(bucket="temp-big-data-csv", key="10000_mb.csv")
+        end = time.time()
+        print(f"Returned {count=} in {end - start} seconds.")
