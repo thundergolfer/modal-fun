@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 import random
 import string
 import sys
@@ -25,14 +26,14 @@ def random_alphanum_str(min_len: int, max_len: int) -> str:
 
 
 def fake_csv_data(size_mb: int):
-    """u/kawaii_kebab's analysis problem had the schema 'email STRING, password STRING."""
+    """u/kawaii_kebab's analysis problem had the schema 'email STRING, password STRING.'"""
     domains = {}
     csvfile = io.StringIO()
     spamwriter = csv.writer(
         csvfile, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
     )
 
-    approx_entry_bytes = 45
+    approx_entry_bytes = 42
     entries_per_mb = (1024 * 1024) / approx_entry_bytes
     required_entries = int(size_mb * entries_per_mb)
     domains = {
@@ -58,7 +59,11 @@ def fake_csv_data(size_mb: int):
     return data
 
 
-@stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
+@stub.function(
+    concurrency_limit=250,
+    image=image,
+    secret=modal.Secret.from_name("personal-aws-user"),
+)
 def upload_part(bucket, key, upload_id, part_num, size_mb):
     import boto3
 
@@ -98,7 +103,7 @@ def upload_fake_csv(desired_mb: int):
 
     upload_id = multipart_upload["UploadId"]
     print(f"Upload ID: {upload_id}")
-    upload_size_mb = 100  # Constrained by how fast Python can produce fake data?
+    upload_size_mb = 200
     num_uploads = desired_mb // upload_size_mb
 
     uploads = [
@@ -143,22 +148,25 @@ def count_by_filter_slow(csv_file_path) -> int:
     return count
 
 
-@stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
+@stub.function(
+    image=image,
+    concurrency_limit=500,
+    cpu=1.0,
+    memory=1024,
+    secret=modal.Secret.from_name("personal-aws-user"),
+)
 def process_block(i, df):
-    partition = df.partitions[i]
-    count = (
-        partition[partition["email"].str.endswith("@gmail.com")]["email"]
-        .count()
-        .compute()
-    )
-    print(f"Counted {count} in csv partition {i}")
+    start = time.time()
+    series = df.partitions[i]["email"]
+    count = series.str.endswith("@gmail.com").count().compute()
+    end = time.time()
+    print(f"Counted {count} in csv partition {i}. Took {(end - start):.2f} seconds.")
     return count
 
 
 @stub.function(image=image, secret=modal.Secret.from_name("personal-aws-user"))
 def count_by_filter_fast(bucket: str, key: str) -> int:
     import boto3
-    import pandas as pd
     from dask.dataframe.io import read_csv
 
     s3 = boto3.client("s3")
@@ -166,10 +174,13 @@ def count_by_filter_fast(bucket: str, key: str) -> int:
     size = response["ContentLength"]
     print(f"CSV file is {size} bytes")
 
+    blocksize = "128 MiB"
+    print(f"Reading and partitioning csv with block size of {blocksize}")
+
     csv_file_path = f"s3://{bucket}/{key}"
     df = read_csv(
         urlpath=csv_file_path,
-        blocksize="128 MiB",
+        blocksize=blocksize,
         sep=" ",
         names=["email", "password"],
     )
@@ -183,10 +194,16 @@ def count_by_filter_fast(bucket: str, key: str) -> int:
 
 
 if __name__ == "__main__":
-    with stub.run():
-        # upload_fake_csv(desired_mb=10_000)
+    with stub.run() as app:
+        print(f"{app.app_id=}")
+
+        # start = time.time()
+        # upload_fake_csv(desired_mb=100_000)
+        # end = time.time()
+        # print(f"Created fake data in {end - start} seconds.")
+
         print("Running fast...")
         start = time.time()
-        count = count_by_filter_fast(bucket="temp-big-data-csv", key="10000_mb.csv")
+        count = count_by_filter_fast(bucket="temp-big-data-csv", key="45000_mb.csv")
         end = time.time()
         print(f"Returned {count=} in {end - start} seconds.")
