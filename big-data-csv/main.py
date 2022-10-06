@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import os
 import random
 import string
@@ -156,11 +157,24 @@ def count_by_filter_slow(csv_file_path) -> int:
     secret=modal.Secret.from_name("personal-aws-user"),
 )
 def process_block(i, df):
+    import logging
+    from dask.diagnostics import Profiler
+
+    logging.getLogger("fsspec").setLevel(logging.DEBUG)
+    logging.getLogger("s3fs").setLevel(logging.DEBUG)
     start = time.time()
     series = df.partitions[i]["email"]
-    count = series.str.endswith("@gmail.com").count().compute()
+    with Profiler() as prof:
+        count = (
+            series.str.endswith("@gmail.com")
+            .count()
+            .compute(scheduler="single-threaded")
+        )
     end = time.time()
-    print(f"Counted {count} in csv partition {i}. Took {(end - start):.2f} seconds.")
+    elapsed = end - start
+    print(f"Counted {count} in csv partition {i}. Took {(elapsed):.2f} seconds.")
+    if elapsed > 60:
+        print(prof.results)
     return count
 
 
@@ -198,12 +212,12 @@ if __name__ == "__main__":
         print(f"{app.app_id=}")
 
         # start = time.time()
-        # upload_fake_csv(desired_mb=100_000)
+        # upload_fake_csv(desired_mb=50_000)
         # end = time.time()
         # print(f"Created fake data in {end - start} seconds.")
 
         print("Running fast...")
         start = time.time()
-        count = count_by_filter_fast(bucket="temp-big-data-csv", key="45000_mb.csv")
+        count = count_by_filter_fast(bucket="temp-big-data-csv", key="50000_mb.csv")
         end = time.time()
         print(f"Returned {count=} in {end - start} seconds.")
