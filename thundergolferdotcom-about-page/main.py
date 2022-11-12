@@ -2,13 +2,17 @@ import base64
 import dataclasses
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 
 import modal
 
 stub = modal.Stub(name="thundergolferdotcom-about-page")
+stub.cache = modal.Dict()
 bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
+
+CACHE_TIME_SECS = 60 * 60 * 12
 
 
 @dataclasses.dataclass(frozen=True)
@@ -176,7 +180,6 @@ def request_goodreads_reads(max_books=5) -> list[Book]:
     )
     html_doc = urllib.request.urlopen(req).read().decode()
     soup = BeautifulSoup(html_doc, "html.parser")
-    # print(soup.prettify())
 
     books_table = soup.find("tbody", {"id": "booksBody"})
     books = []
@@ -209,15 +212,27 @@ def request_goodreads_reads(max_books=5) -> list[Book]:
 
 @stub.webhook(secret=modal.Secret.from_name("spotify-aboutme"))
 def about_me():
+    from modal import container_app
+    # Cache the retrieved data for 10x faster endpoint performance.
+    now = int(time.time())
+    try:
+        (store_time, response) = container_app.cache["response"]
+        if now - store_time <= CACHE_TIME_SECS:
+            return response
+    except KeyError:
+        pass
+
     stats = AboutMeStats(
         spotify=request_spotify_top_tracks(),
         goodreads=request_goodreads_reads(),
+        # TODO: Actually populate this data.
         twitter=TwitterInfo(
             display_name="Jonathon Belotti",
             handle="thundergolfer",
             byline="",
             link="",
         ),
+        # TODO: Actually populate this data.
         github=GithubInfo(
             username="thundergolfer",
             active_days=[],
@@ -225,7 +240,9 @@ def about_me():
             total_stars=1_000_000_000,
         ),
     )
-    return dataclasses.asdict(stats)
+    response = dataclasses.asdict(stats)
+    container_app.cache["response"] = (now, response)
+    return response
 
 
 if __name__ == "__main__":
