@@ -61,7 +61,7 @@ def fake_csv_data(size_mb: int):
 
 
 @stub.function(
-    concurrency_limit=250,
+    concurrency_limit=30,
     image=image,
     secret=modal.Secret.from_name("personal-aws-user"),
 )
@@ -151,8 +151,8 @@ def count_by_filter_slow(csv_file_path) -> int:
 
 @stub.function(
     image=image,
-    concurrency_limit=500,
-    cpu=1.0,
+    concurrency_limit=30,
+    cpu=4.0,
     memory=1024,
     secret=modal.Secret.from_name("personal-aws-user"),
 )
@@ -212,12 +212,12 @@ if __name__ == "__main__":
         print(f"{app.app_id=}")
 
         # start = time.time()
-        # upload_fake_csv(desired_mb=50_000)
+        # upload_fake_csv(desired_mb=90_000)
         # end = time.time()
         # print(f"Created fake data in {end - start} seconds.")
 
         print("Running fast...")
         start = time.time()
-        count = count_by_filter_fast(bucket="temp-big-data-csv", key="50000_mb.csv")
+        count = count_by_filter_fast(bucket="temp-big-data-csv", key="90000_mb.csv")
         end = time.time()
         print(f"Returned {count=} in {end - start} seconds.")
