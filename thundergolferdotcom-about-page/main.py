@@ -165,7 +165,7 @@ def request_spotify_top_tracks(max_tracks=5) -> list[SpotifyTrack]:
 
 
 @stub.function(image=bs4_image)
-def request_goodreads_reads(max_books=5) -> list[Book]:
+def request_goodreads_reads(max_books=3) -> list[Book]:
     """
     Setting @stub.function(interactive=True, ...) was really helpful in writing this function.
     """
@@ -210,7 +210,13 @@ def request_goodreads_reads(max_books=5) -> list[Book]:
     return books
 
 
-@stub.webhook(secret=modal.Secret.from_name("spotify-aboutme"))
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+web_app = FastAPI()
+
+
+@stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
 def about_me():
     from modal import container_app
     # Cache the retrieved data for 10x faster endpoint performance.
@@ -243,6 +249,28 @@ def about_me():
     response = dataclasses.asdict(stats)
     container_app.cache["response"] = (now, response)
     return response
+
+
+@web_app.get("/")
+def hook():
+    return about_me()
+
+
+@stub.asgi
+def web():
+    web_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://thundergolfer.com", "https://thundergolfer.com",
+            "http://localhost:4000", "http://localhost:4000/",
+            "localhost:4000", "localhost:4000/",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    return web_app
 
 
 if __name__ == "__main__":
