@@ -7,13 +7,17 @@ import urllib.parse
 import urllib.request
 
 import modal
+from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
+
 
 stub = modal.Stub(name="thundergolferdotcom-about-page")
 stub.cache = modal.Dict()
 bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
 
-CACHE_TIME_SECS = 60 * 60 * 12
+web_app = FastAPI()
 
+CACHE_TIME_SECS = 60 * 60 * 12
 
 @dataclasses.dataclass(frozen=True)
 class SpotifyTrack:
@@ -210,12 +214,6 @@ def request_goodreads_reads(max_books=3) -> list[Book]:
     return books
 
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-web_app = FastAPI()
-
-
 @stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
 def about_me():
     from modal import container_app
@@ -252,7 +250,8 @@ def about_me():
 
 
 @web_app.get("/")
-def hook():
+def hook(response: Response):
+    response.headers["Cache-Control"] = f"max-age={CACHE_TIME_SECS}"
     return about_me()
 
 
