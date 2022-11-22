@@ -148,7 +148,7 @@ def request_spotify_top_tracks(max_tracks=5) -> list[SpotifyTrack]:
     access_token = json.loads(response)["access_token"]
 
     req = urllib.request.Request(
-        "https://api.spotify.com/v1/me/top/tracks",
+        "https://api.spotify.com/v1/me/top/tracks?time_range=short_term",
         headers={
             "Authorization": f"Bearer {access_token}",
         },
