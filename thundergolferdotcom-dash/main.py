@@ -19,6 +19,7 @@ web_app = FastAPI()
 
 CACHE_TIME_SECS = 60 * 60 * 12
 
+
 @dataclasses.dataclass(frozen=True)
 class SpotifyTrack:
     name: str
@@ -198,7 +199,11 @@ def request_goodreads_reads(max_books=3) -> list[Book]:
         # Resize the cover:
         # The thumbnail in the results are tiny, but can be enlarged by modifying the SY25
         # url part to be a bigger number, like SY600.
-        cover_link = cover_link.replace("SY75", "SY600")
+        cover_link = (
+            cover_link.replace("SY75", "SY600")
+            .replace("SX50", "SY600")
+            .replace("SY50", "SY600")
+        )
 
         author_data = book_item.find("td", {"class": "author"})
         author = author_data.find("a").get_text().strip()
@@ -217,6 +222,7 @@ def request_goodreads_reads(max_books=3) -> list[Book]:
 @stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
 def about_me():
     from modal import container_app
+
     # Cache the retrieved data for 10x faster endpoint performance.
     now = int(time.time())
     try:
@@ -260,9 +266,12 @@ def web():
     web_app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://thundergolfer.com", "https://thundergolfer.com",
-            "http://localhost:4000", "http://localhost:4000/",
-            "localhost:4000", "localhost:4000/",
+            "http://thundergolfer.com",
+            "https://thundergolfer.com",
+            "http://localhost:4000",
+            "http://localhost:4000/",
+            "localhost:4000",
+            "localhost:4000/",
         ],
         allow_credentials=True,
         allow_methods=["*"],
