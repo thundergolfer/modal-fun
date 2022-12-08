@@ -13,7 +13,7 @@ import modal
 volume = modal.SharedVolume().persist("dataset-cache-vol")
 stub = modal.Stub("modal-datasette-covid")
 datasette_image = (
-    modal.DebianSlim()
+    modal.Image.debian_slim()
     .pip_install(
         [
             "datasette",
