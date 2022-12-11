@@ -17,6 +17,7 @@ def test_create_sub(store):
         created_at=datetime.fromtimestamp(0, tz=pytz.utc),
         confirmed_at=None,
         unsubbed_at=None,
+        deleted_at=None,
         referrer="",
     )
     assert expected == actual
@@ -88,3 +89,26 @@ def test_unsub(store):
 
     assert sub.unsubbed
     assert sub.unsubbed_at
+
+
+def test_create_and_list_notifications(store):
+    test_recipients = ["a@b.com", "jono@gmail.com"]
+    n = store.create_notification(
+        link="https://foo.bar",
+        recipients=test_recipients,
+    )
+
+    notifications = store.list_notifications()
+    assert len(notifications) == 1
+    assert notifications[0] == datastore.Notification(
+        blogpost_link="https://foo.bar",
+        notified_at=datetime.fromtimestamp(0, tz=pytz.utc),
+        recipients="a@b.com,jono@gmail.com"
+    )
+
+    n = store.create_notification(
+        link="https://foo.bar/another",
+        recipients=test_recipients,
+    )
+    notifications = store.list_notifications()
+    assert len(notifications) == 2

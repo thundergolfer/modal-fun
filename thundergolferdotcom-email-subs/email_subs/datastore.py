@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Optional
 
 
 class Subscriber(NamedTuple):
@@ -12,7 +12,14 @@ class Subscriber(NamedTuple):
     created_at: datetime
     confirmed_at: datetime
     unsubbed_at: datetime
+    deleted_at: datetime
     referrer: str
+
+class Notification(NamedTuple):
+    blogpost_link: str
+    notified_at: datetime
+    # Comma-separated list of emails
+    recipients: str
 
 
 class Datastore:
@@ -43,12 +50,13 @@ class Datastore:
             created_at=self.clock_fn(),
             confirmed_at=None,
             unsubbed_at=None,
+            deleted_at=None,
             referrer=referrer,
         )
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO subscriber VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO subscriber VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 sub,
             )
         return sub
@@ -56,7 +64,7 @@ class Datastore:
     def confirm_sub(self, email: str, code: str) -> bool:
         with self.conn:
             cursor = self.conn.cursor()
-            cursor.execute(f"SELECT * FROM subscriber WHERE email = ?", (email,))
+            cursor.execute(f"SELECT * FROM subscriber WHERE email = ? AND deleted_at IS NULL", (email,))
             if cursor.fetchone() is None:
                 raise ValueError(f"No subscriber found for email '{email}'")
             cursor.execute(
@@ -73,7 +81,7 @@ class Datastore:
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(
-                f"SELECT * FROM subscriber WHERE email = ? AND confirmed = 1", (email,)
+                f"SELECT * FROM subscriber WHERE email = ? AND confirmed = 1 AND deleted_at IS NULL", (email,)
             )
             if cursor.fetchone() is None:
                 raise ValueError(f"No confirmed subscriber found for email '{email}'")
@@ -88,10 +96,12 @@ class Datastore:
         return True
 
     def get_sub(self, email: str) -> Subscriber:
-        query = f"SELECT * FROM subscriber WHERE email = '{email}'"
         with self.conn:
             cursor = self.conn.cursor()
-            cursor.execute(query)
+            cursor.execute(
+                "SELECT * FROM subscriber WHERE email = ? AND deleted_at IS NULL",
+                (email,)
+            )
             row = cursor.fetchone()
         if row is None:
             raise KeyError(f"No subscriber with email '{email}'")
@@ -104,8 +114,72 @@ class Datastore:
             created_at=row[5],
             confirmed_at=row[6],
             unsubbed_at=row[7],
-            referrer=row[8],
+            deleted_at=row[8],
+            referrer=row[9],
         )
+
+    def list_subs(
+        self,
+        include_unconfirmed: bool = False, 
+        include_unsubbed: bool = False,
+        include_deleted: bool = False,
+    ) -> list[Subscriber]:
+        query = """SELECT * 
+            FROM subscriber
+            WHERE email is NOT NULL"""
+        if not include_unconfirmed:
+            query += " AND confirmed = TRUE"
+        if not include_unsubbed:
+            query += " AND unsubbed = FALSE"
+        if not include_deleted:
+            query += " AND deleted_at IS NOT NULL"
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+        return [
+            Subscriber(
+                email=row[0],
+                confirm_code=row[1],
+                unsub_code=row[2],
+                confirmed=bool(row[3]),
+                unsubbed=bool(row[4]),
+                created_at=row[5],
+                confirmed_at=row[6],
+                unsubbed_at=row[7],
+                deleted_at=row[8],
+                referrer=row[9],
+            )
+            for row in rows
+        ]
+
+    def create_notification(self, link: str, recipients: list[str]) -> Notification:
+        n = Notification(
+            blogpost_link=link,
+            notified_at=self.clock_fn(),
+            recipients=",".join(recipients),
+        )
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO notification VALUES(?, ?, ?)",
+                n,
+            )
+        return n
+
+    def list_notifications(self) -> list[Notification]:
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT blogpost_link, notified_at as \"[timestamp]\", recipients FROM notification")
+            rows = cursor.fetchall()
+        return [
+            Notification(
+                blogpost_link=row[0],
+                notified_at=datetime.fromisoformat(row[1]),
+                recipients=row[2],
+            )
+            for row in rows
+        ]
 
 
 def init(db) -> None:
@@ -121,6 +195,15 @@ def init(db) -> None:
             created_at INTEGER,
             confirmed_at INTEGER,
             unsubbed_at INTEGER,
+            deleted_at INTEGER,
             referrer TEXT
+        )"""
+        )
+        # Append-only table
+        cursor.execute(
+            """CREATE TABLE notification(
+            blogpost_link TEXT PRIMARY KEY, 
+            notified_at INTEGER,
+            recipients TEXT
         )"""
         )

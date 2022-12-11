@@ -12,7 +12,7 @@ def test_clock_fn():
 
 @pytest.fixture(scope="session")
 def store():
-    db = sqlite3.connect(":memory:")
+    db = sqlite3.connect(":memory:", detect_types=sqlite3.PARSE_DECLTYPES)
     datastore.init(db)
     store = datastore.Datastore(
         conn=db,
