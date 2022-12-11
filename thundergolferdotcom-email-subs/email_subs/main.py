@@ -8,6 +8,9 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from . import datastore
+from . import emailer
+
 image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
 )
@@ -79,6 +82,20 @@ SCOPES = [
 ]
 
 
+def _check_labels():
+    # Call the Gmail API
+    service = build("gmail", "v1", credentials=creds)
+    results = service.users().labels().list(userId="me").execute()
+    labels = results.get("labels", [])
+
+    if not labels:
+        print("No labels found.")
+        return
+    print("Labels:")
+    for label in labels:
+        print(label["name"])
+
+
 def main():
     """
     Shows basic usage of the Gmail API.
@@ -102,18 +119,16 @@ def main():
             token.write(creds.to_json())
 
     try:
-        # Call the Gmail API
-        service = build("gmail", "v1", credentials=creds)
-        results = service.users().labels().list(userId="me").execute()
-        labels = results.get("labels", [])
-
-        if not labels:
-            print("No labels found.")
-            return
-        print("Labels:")
-        for label in labels:
-            print(label["name"])
-
+        sender = emailer.GmailSender(creds)
+        emailer.send(
+            sender=sender,
+            subject="Testy McTestFace",
+            content="Hello from Modal script!",
+            from_addr="jonathon.i.belotti@gmail.com",
+            recipients=[
+                "jonathon@modal.com",
+            ],
+        )
     except HttpError as error:
         # TODO(developer) - Handle errors from gmail API.
         print(f"An error occurred: {error}")
