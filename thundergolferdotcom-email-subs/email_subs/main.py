@@ -112,7 +112,7 @@ def notify_subscribers_of_new_posts():
     store = datastore.Datastore(
         conn=conn,
         codegen_fn=lambda: str(uuid.uuid4()),
-        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+        clock_fn=lambda: datetime.now(timezone.utc),
     )
     notifications = store.list_notifications()
     seen_links = set(n.blogpost_link for n in notifications)
@@ -185,7 +185,7 @@ def send_confirmation_email(email: str):
     store = datastore.Datastore(
         conn=conn,
         codegen_fn=lambda: str(uuid.uuid4()),
-        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+        clock_fn=lambda: datetime.now(timezone.utc),
     )
 
     subscriber = store.create_sub(email=email)
@@ -209,7 +209,7 @@ def confirm(email: str, code: str):
     store = datastore.Datastore(
         conn=conn,
         codegen_fn=lambda: str(uuid.uuid4()),
-        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+        clock_fn=lambda: datetime.now(timezone.utc),
     )
     try:
         confirmed = store.confirm_sub(email=email, code=code)
@@ -231,7 +231,7 @@ def unsubscribe(email: str, code: str):
     store = datastore.Datastore(
         conn=conn,
         codegen_fn=lambda: str(uuid.uuid4()),
-        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+        clock_fn=lambda: datetime.now(timezone.utc),
     )
     try:
         unsubbed = store.unsub(email=email, code=code)
