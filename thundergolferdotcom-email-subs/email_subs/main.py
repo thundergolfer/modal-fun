@@ -43,7 +43,7 @@ def utc_now() -> datetime:
 
 def utc_age(dt: datetime, base: datetime) -> float:
     return (base - dt).total_seconds()
-    
+
 
 class BlogEntry(NamedTuple):
     title: str
@@ -71,7 +71,7 @@ def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
 @stub.function(shared_volumes={CACHE_DIR: volume})
 def setup_db():
     """
-    Only need to run this once for a Modal app. 
+    Only need to run this once for a Modal app.
     Creates and initializes an SQLite DB on a Modal persistent volume.
     """
     print("Setting up new DB... (this should only run once)")
@@ -92,7 +92,7 @@ def reset_db():
 # Check relatively frequently for new posts, because subscribers should
 # be among first to hear of a new post.
 @stub.function(
-    schedule=modal.Period(hours=3), 
+    schedule=modal.Period(hours=3),
     shared_volumes={CACHE_DIR: volume},
     secret=modal.Secret.from_name("gmail"),
 )
@@ -103,8 +103,8 @@ def notify_subscribers_of_new_posts():
             "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
             "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
             "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
-        }, 
-        scopes=SCOPES
+        },
+        scopes=SCOPES,
     )
     sender = emailer.GmailSender(creds)
 
@@ -135,21 +135,26 @@ def notify_subscribers_of_new_posts():
     if not posts_for_notification:
         print(f"No new posts @ {now}. Done for now.")
     else:
-        print(f"Found {len(posts_for_notification)} recent posts not yet sent to subscribers.")
+        print(
+            f"Found {len(posts_for_notification)} recent posts not yet sent to subscribers."
+        )
 
     active_subs = store.list_subs()
     # Important: register notifications in DB.
     # TODO: Ensure DB locked for writes.
     for p in posts_for_notification:
         store.create_notification(
-            link=p.link,
-            recipients=[s.email for s in active_subs]
+            link=p.link, recipients=[s.email for s in active_subs]
         )
 
-    print(f"Sending new post notification email to {len(active_subs)} active email subscribers.")
+    print(
+        f"Sending new post notification email to {len(active_subs)} active email subscribers."
+    )
     for subscriber in active_subs:
         code = subscriber.unsub_code
-        unsub_link = f"https://thundergolfer--{app_name}-web.modal.run/unsubscribe?code={code}"
+        unsub_link = (
+            f"https://thundergolfer--{app_name}-web.modal.run/unsubscribe?code={code}"
+        )
         copy = email_copy.construct_new_blogpost_email(
             blog_links=[p.link for p in posts_for_notification],
             blog_titles=[p.title for p in posts_for_notification],
@@ -163,7 +168,6 @@ def notify_subscribers_of_new_posts():
             recipient=subscriber.email,
         )
     print("✅ Done!")
-        
 
 
 @stub.function(
@@ -176,8 +180,8 @@ def send_confirmation_email(email: str):
             "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
             "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
             "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
-        }, 
-        scopes=SCOPES
+        },
+        scopes=SCOPES,
     )
 
     # Create subscriber
@@ -205,6 +209,7 @@ def send_confirmation_email(email: str):
 @web_app.get("/confirm")
 def confirm(email: str, code: str):
     from fastapi import HTTPException
+
     conn = datastore.get_db(DB_PATH)
     store = datastore.Datastore(
         conn=conn,
@@ -216,10 +221,7 @@ def confirm(email: str, code: str):
         assert confirmed
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=exc.message)
-    return {
-        "message": f"subscription confirmed for '{email}'"
-    }
-
+    return {"message": f"subscription confirmed for '{email}'"}
 
 
 @web_app.get("/unsubscribe")
@@ -227,6 +229,7 @@ def unsubscribe(email: str, code: str):
     # Check code against email. If match, unsubscribe user
     # and send back HTML page showing them they were unsubscribed.
     from fastapi import HTTPException
+
     conn = datastore.get_db(DB_PATH)
     store = datastore.Datastore(
         conn=conn,

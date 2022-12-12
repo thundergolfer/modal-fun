@@ -38,9 +38,9 @@ def send(
     recipient: str,
 ) -> None:
     message = EmailMessage()
-    message.add_header('Content-Type','text/html')
+    message.add_header("Content-Type", "text/html")
     message.set_payload(content)
-    message["To"] = recipient,
+    message["To"] = recipient
     message["From"] = from_addr
     message["Subject"] = subject
     sender.send(message)
