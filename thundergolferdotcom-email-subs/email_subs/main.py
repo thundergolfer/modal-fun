@@ -249,6 +249,9 @@ def unsubscribe(email: str, code: str):
 
 @web_app.get("/subscribe")
 def subscribe(email: str):
+    from fastapi import HTTPException
+    if not email:
+        raise HTTPException(status_code=400, detail="email cannot be empty")
     # 1. check if email is already subscribed
     # 2. send confirmation email if not
     send_confirmation_email.spawn(email=email)
