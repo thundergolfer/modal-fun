@@ -45,7 +45,7 @@ def confirm_subscription_email(confirmation_link: str) -> EmailCopy:
         subject="Confirm subscription to thundergolfer.com blog",
         body=(
             "To confirm your subscription to <a href='https://thundergolfer.com/'>thundergolfer.com/blog</a>, "
-            f"please <strong><a href='{confirmation_link}'>click here</a><strong>.\n\n"
+            f"please <strong><a href='{confirmation_link}'>click here</a></strong>.\n\n"
             "If you didn't subscribe to <a href='https://thundergolfer.com/'>thundergolfer.com/blog</a>, "
             "please disregard this email.\n"
         )

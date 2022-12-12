@@ -248,7 +248,7 @@ def subscribe(email: str):
     # 1. check if email is already subscribed
     # 2. send confirmation email if not
     send_confirmation_email.spawn(email=email)
-    return {"hello": "world"}
+    return {"message": f"Confirmation email sent to '{email}'"}
 
 
 @stub.asgi()
