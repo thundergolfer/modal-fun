@@ -1,4 +1,9 @@
 import os
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import NamedTuple
+
 import modal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,21 +16,97 @@ from googleapiclient.errors import HttpError
 from . import datastore
 from . import emailer
 
+CACHE_DIR = "/cache"
+DB_PATH = CACHE_DIR + "/emailsubs.db"
+
+app_name = "thundergolferdotcom-email-subs"
+volume = modal.SharedVolume().persist(f"{app_name}-vol")
 image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
 )
-stub = modal.Stub(name="thundergolferdotcom-email-subs")
+stub = modal.Stub(name=app_name, image=image)
 stub.confirmation_code_to_email = modal.Dict()
 web_app = FastAPI()
 
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def utc_age(dt: datetime, base: datetime) -> float:
+    return (base - dt).total_seconds()
+    
+
+class BlogEntry(NamedTuple):
+    title: str
+    link: str
+    published_datetime: datetime
+
+
+def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
+    import feedparser
+
+    feed = feedparser.parse("https://thundergolfer.com/feed.xml")
+    return [
+        BlogEntry(
+            title=entry["title"],
+            link=entry["link"],
+            published_datetime=datetime.fromtimestamp(
+                time.mktime(entry["published_parsed"]),
+                timezone.utc,
+            ),
+        )
+        for entry in feed.entries
+    ]
+
+
+@stub.function(shared_volumes={CACHE_DIR: volume})
+def setup_db():
+    """
+    Only need to run this once for a Modal app. 
+    Creates and initializes an SQLite DB on a Modal persistent volume.
+    """
+    print("Setting up new DB... (this should only run once)")
+    conn = datastore.get_db(DB_PATH)
+    datastore.init(conn)
+    print("☑️ DB setup done")
+
+
 # Check relatively frequently for new posts, because subscribers should
 # be among first to hear of a new post.
-@stub.function(schedule=modal.Period(hours=3))
-def check_for_new_post():
+@stub.function(schedule=modal.Period(hours=3), shared_volumes={CACHE_DIR: volume})
+def notify_subscribers_of_new_posts():
     # If new, unseen post:
     # 1. mark post as seen
     # 2. send out emails to all confirmed subscribers
-    pass
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid.uuid4()),
+        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+    notifications = store.list_notifications()
+    seen_links = set(n.blogpost_link for n in notifications)
+
+    now = utc_now()
+    two_days_in_secs = 60 * 60 * 24 * 2
+    posts_for_notification: list[BlogEntry] = []
+    posts = fetch_my_blog_posts_from_rss()
+    print(f"Got {len(posts)} from RSS feed.")
+    for post in posts:
+        if utc_age(post.published_datetime, now) > two_days_in_secs:
+            # Defensively ignoring old blog posts. Likely shouldn't push these out.
+            print(f"'{post.title}' too old")
+            continue
+        if post.link in seen_links:
+            print(f"'{post.title}' already sent to subscribers")
+            continue
+        posts_for_notification.append(post)
+
+    if not posts_for_notification:
+        print(f"No new posts @ {now}. Done for now.")
+    else:
+        print(f"Found {len(posts_for_notification)} recent posts not yet sent to subscribers.")
 
 
 @stub.function
@@ -135,5 +216,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
     # stub.serve()
+    with stub.run():
+        notify_subscribers_of_new_posts.call()

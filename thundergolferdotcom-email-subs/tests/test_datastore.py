@@ -103,7 +103,7 @@ def test_create_and_list_notifications(store):
     assert notifications[0] == datastore.Notification(
         blogpost_link="https://foo.bar",
         notified_at=datetime.fromtimestamp(0, tz=pytz.utc),
-        recipients="a@b.com,jono@gmail.com"
+        recipients="a@b.com,jono@gmail.com",
     )
 
     n = store.create_notification(

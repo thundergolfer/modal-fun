@@ -15,6 +15,7 @@ class Subscriber(NamedTuple):
     deleted_at: datetime
     referrer: str
 
+
 class Notification(NamedTuple):
     blogpost_link: str
     notified_at: datetime
@@ -64,7 +65,10 @@ class Datastore:
     def confirm_sub(self, email: str, code: str) -> bool:
         with self.conn:
             cursor = self.conn.cursor()
-            cursor.execute(f"SELECT * FROM subscriber WHERE email = ? AND deleted_at IS NULL", (email,))
+            cursor.execute(
+                f"SELECT * FROM subscriber WHERE email = ? AND deleted_at IS NULL",
+                (email,),
+            )
             if cursor.fetchone() is None:
                 raise ValueError(f"No subscriber found for email '{email}'")
             cursor.execute(
@@ -81,7 +85,8 @@ class Datastore:
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(
-                f"SELECT * FROM subscriber WHERE email = ? AND confirmed = 1 AND deleted_at IS NULL", (email,)
+                f"SELECT * FROM subscriber WHERE email = ? AND confirmed = 1 AND deleted_at IS NULL",
+                (email,),
             )
             if cursor.fetchone() is None:
                 raise ValueError(f"No confirmed subscriber found for email '{email}'")
@@ -100,7 +105,7 @@ class Datastore:
             cursor = self.conn.cursor()
             cursor.execute(
                 "SELECT * FROM subscriber WHERE email = ? AND deleted_at IS NULL",
-                (email,)
+                (email,),
             )
             row = cursor.fetchone()
         if row is None:
@@ -120,7 +125,7 @@ class Datastore:
 
     def list_subs(
         self,
-        include_unconfirmed: bool = False, 
+        include_unconfirmed: bool = False,
         include_unsubbed: bool = False,
         include_deleted: bool = False,
     ) -> list[Subscriber]:
@@ -170,7 +175,9 @@ class Datastore:
     def list_notifications(self) -> list[Notification]:
         with self.conn:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT blogpost_link, notified_at as \"[timestamp]\", recipients FROM notification")
+            cursor.execute(
+                'SELECT blogpost_link, notified_at as "[timestamp]", recipients FROM notification'
+            )
             rows = cursor.fetchall()
         return [
             Notification(
@@ -180,6 +187,10 @@ class Datastore:
             )
             for row in rows
         ]
+
+
+def get_db(path: str) -> sqlite3.Connection:
+    return sqlite3.connect(path)
 
 
 def init(db) -> None:
