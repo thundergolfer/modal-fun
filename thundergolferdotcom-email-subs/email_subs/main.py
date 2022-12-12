@@ -15,9 +15,17 @@ from googleapiclient.errors import HttpError
 
 from . import datastore
 from . import emailer
+from . import email_copy
 
 CACHE_DIR = "/cache"
 DB_PATH = CACHE_DIR + "/emailsubs.db"
+# If modifying these scopes, delete the file token.json.
+SCOPES = [
+    # Used for sanity-checking OAuth success
+    "https://www.googleapis.com/auth/gmail.readonly",
+    # Required to send out the 'new blog post' email notifications
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 app_name = "thundergolferdotcom-email-subs"
 volume = modal.SharedVolume().persist(f"{app_name}-vol")
@@ -72,13 +80,34 @@ def setup_db():
     print("☑️ DB setup done")
 
 
+@stub.function(shared_volumes={CACHE_DIR: volume})
+def reset_db():
+    """
+    ⚠️ Only use during testing. Don't reset production DB as it could cause
+    duplication notifications to be sent to subscribers.
+    """
+    raise NotImplementedError()
+
+
 # Check relatively frequently for new posts, because subscribers should
 # be among first to hear of a new post.
-@stub.function(schedule=modal.Period(hours=3), shared_volumes={CACHE_DIR: volume})
+@stub.function(
+    schedule=modal.Period(hours=3), 
+    shared_volumes={CACHE_DIR: volume},
+    secret=modal.Secret.from_name("gmail"),
+)
 def notify_subscribers_of_new_posts():
-    # If new, unseen post:
-    # 1. mark post as seen
-    # 2. send out emails to all confirmed subscribers
+    # Create emailer
+    creds = Credentials.from_authorized_user_info(
+        info={
+            "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
+            "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
+            "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
+        }, 
+        scopes=SCOPES
+    )
+    sender = emailer.GmailSender(creds)
+
     conn = datastore.get_db(DB_PATH)
     store = datastore.Datastore(
         conn=conn,
@@ -108,33 +137,121 @@ def notify_subscribers_of_new_posts():
     else:
         print(f"Found {len(posts_for_notification)} recent posts not yet sent to subscribers.")
 
+    active_subs = store.list_subs()
+    # Important: register notifications in DB.
+    # TODO: Ensure DB locked for writes.
+    for p in posts_for_notification:
+        store.create_notification(
+            link=p.link,
+            recipients=[s.email for s in active_subs]
+        )
 
-@stub.function
+    print(f"Sending new post notification email to {len(active_subs)} active email subscribers.")
+    for subscriber in active_subs:
+        code = subscriber.unsub_code
+        unsub_link = f"https://thundergolfer--{app_name}-web.modal.run/unsubscribe?code={code}"
+        copy = email_copy.construct_new_blogpost_email(
+            blog_links=[p.link for p in posts_for_notification],
+            blog_titles=[p.title for p in posts_for_notification],
+            unsubscribe_link=unsub_link,
+        )
+        emailer.send(
+            sender=sender,
+            subject=copy.subject,
+            content=copy.body,
+            from_addr="jonathon.i.belotti@gmail.com",
+            recipient=subscriber.email,
+        )
+    print("✅ Done!")
+        
+
+
+@stub.function(
+    secret=modal.Secret.from_name("gmail"),
+    shared_volumes={CACHE_DIR: volume},
+)
 def send_confirmation_email(email: str):
-    pass
+    creds = Credentials.from_authorized_user_info(
+        info={
+            "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
+            "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
+            "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
+        }, 
+        scopes=SCOPES
+    )
+
+    # Create subscriber
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid.uuid4()),
+        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    subscriber = store.create_sub(email=email)
+    code = subscriber.confirm_code
+    confirm_link = f"https://thundergolfer--{app_name}-web.modal.run/confirm?code={code}"
+    sender = emailer.GmailSender(creds)
+    copy = email_copy.confirm_subscription_email(confirm_link)
+    emailer.send(
+        sender=sender,
+        subject=copy.subject,
+        content=copy.body,
+        from_addr="jonathon.i.belotti@gmail.com",
+        recipient=subscriber.email,
+    )
 
 
 @web_app.get("/confirm")
 def confirm(email: str, code: str):
-    pass
+    from fastapi import HTTPException
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid.uuid4()),
+        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+    try:
+        confirmed = store.confirm_sub(email=email, code=code)
+        assert confirmed
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
+    return {
+        "message": f"subscription confirmed for '{email}'"
+    }
+
 
 
 @web_app.get("/unsubscribe")
 def unsubscribe(email: str, code: str):
     # Check code against email. If match, unsubscribe user
     # and send back HTML page showing them they were unsubscribed.
-    pass
+    from fastapi import HTTPException
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid.uuid4()),
+        clock_fn=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+    try:
+        unsubbed = store.unsub(email=email, code=code)
+        assert unsubbed
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
+    return {
+        "message": f"'{email}' is unsubscribed successfully from thundergolfer.com/blog"
+    }
 
 
 @web_app.get("/subscribe")
 def subscribe(email: str):
     # 1. check if email is already subscribed
     # 2. send confirmation email if not
-    send_confirmation_email.spawn(email="")
+    send_confirmation_email.spawn(email=email)
     return {"hello": "world"}
 
 
-@stub.asgi
+@stub.asgi()
 def web():
     web_app.add_middleware(
         CORSMiddleware,
@@ -152,15 +269,6 @@ def web():
     )
 
     return web_app
-
-
-# If modifying these scopes, delete the file token.json.
-SCOPES = [
-    # Used for sanity-checking OAuth success
-    "https://www.googleapis.com/auth/gmail.readonly",
-    # Required to send out the 'new blog post' email notifications
-    "https://www.googleapis.com/auth/gmail.send",
-]
 
 
 def _check_labels():
@@ -217,6 +325,6 @@ def main():
 
 if __name__ == "__main__":
     # main()
-    # stub.serve()
-    with stub.run():
-        notify_subscribers_of_new_posts.call()
+    stub.serve()
+    # with stub.run():
+    #     notify_subscribers_of_new_posts.call()

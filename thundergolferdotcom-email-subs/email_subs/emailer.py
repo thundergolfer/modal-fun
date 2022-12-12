@@ -35,14 +35,12 @@ def send(
     subject: str,
     content: str,
     from_addr: str,
-    recipients: list[str],
+    recipient: str,
 ) -> None:
-    """
-    This method will only use BCC, as is appropiate for sending our broadcast-type emails like Newsletters.
-    """
     message = EmailMessage()
     message.set_content(content)
-    message["Bcc"] = ", ".join(recipients)
+    message["To"] = recipient,
     message["From"] = from_addr
     message["Subject"] = subject
-    sender.send(message)
+    result = sender.send(message)
+    print(f"Sent email to '{recipient}'. Message Id: {result['id']}")
