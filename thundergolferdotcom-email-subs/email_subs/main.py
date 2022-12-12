@@ -194,7 +194,7 @@ def send_confirmation_email(email: str):
 
     subscriber = store.create_sub(email=email)
     code = subscriber.confirm_code
-    confirm_link = f"https://thundergolfer--{app_name}-web.modal.run/confirm?email={subscriber.email}code={code}"
+    confirm_link = f"https://thundergolfer--{app_name}-web.modal.run/confirm?email={subscriber.email}&code={code}"
     sender = emailer.GmailSender(creds)
     copy = email_copy.confirm_subscription_email(confirm_link)
     emailer.send(
