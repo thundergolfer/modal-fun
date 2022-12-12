@@ -42,5 +42,4 @@ def send(
     message["To"] = recipient,
     message["From"] = from_addr
     message["Subject"] = subject
-    result = sender.send(message)
-    print(f"Sent email to '{recipient}'. Message Id: {result['id']}")
+    sender.send(message)
