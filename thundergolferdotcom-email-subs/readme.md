@@ -57,3 +57,10 @@ python3 -m pytest
 
 _Coming soon_. I'd like to have a test that goes end-to-end, from checking an RSS
 feed to sending an email to a test email account.
+
+## Deploy
+
+```sh
+cd thundergolferdotcom-email-subs/
+modal app deploy email_subs.main
+```
