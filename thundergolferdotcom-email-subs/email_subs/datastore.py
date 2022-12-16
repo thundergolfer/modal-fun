@@ -137,7 +137,7 @@ class Datastore:
         if not include_unsubbed:
             query += " AND unsubbed = FALSE"
         if not include_deleted:
-            query += " AND deleted_at IS NOT NULL"
+            query += " AND deleted_at IS NULL"
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(query)
