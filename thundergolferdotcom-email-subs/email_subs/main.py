@@ -89,14 +89,18 @@ def reset_db():
     raise NotImplementedError()
 
 
-# Check relatively frequently for new posts, because subscribers should
-# be among first to hear of a new post.
 @stub.function(
+    # Check relatively frequently for new posts, because subscribers should
+    # be among first to hear of a new post.
     schedule=modal.Period(hours=3),
     shared_volumes={CACHE_DIR: volume},
     secret=modal.Secret.from_name("gmail"),
 )
 def notify_subscribers_of_new_posts():
+    """
+    Cronjob function that checks for new blog posts and if a new one is found
+    sends email notifications to all confirmed subscribers.
+    """
     # Create emailer
     creds = Credentials.from_authorized_user_info(
         info={
@@ -207,8 +211,19 @@ def send_confirmation_email(email: str):
     )
 
 
+@web_app.get("/wake")
+def wake():
+    """Used to alleviate serverless cold-starts."""
+    return "Hello!"
+
+
 @web_app.get("/confirm")
 def confirm(email: str, code: str):
+    """
+    Used by email subscribers to confirm their subscription.
+    Requires email and code values in query params, which are populated
+    for the user in the subscription confirmation email they're sent.
+    """
     from fastapi import HTTPException
 
     conn = datastore.get_db(DB_PATH)
@@ -227,6 +242,13 @@ def confirm(email: str, code: str):
 
 @web_app.get("/unsubscribe")
 def unsubscribe(email: str, code: str):
+    """
+    Unsubscribes an email from future updates. 'Unsubscribe' links
+    using this endpoint are provided in every subscription email, in
+    accordance with email provider requirements.
+
+    ref: https://support.google.com/mail/answer/81126?hl=en
+    """
     # Check code against email. If match, unsubscribe user
     # and send back HTML page showing them they were unsubscribed.
     from fastapi import HTTPException
@@ -249,7 +271,12 @@ def unsubscribe(email: str, code: str):
 
 @web_app.get("/subscribe")
 def subscribe(email: str):
+    """
+    Creates a new subscription for an email and sends a confirmation email
+    to that email so that the subscription can be confirmed.
+    """
     from fastapi import HTTPException
+
     if not email:
         raise HTTPException(status_code=400, detail="email cannot be empty")
     # 1. check if email is already subscribed
@@ -278,7 +305,7 @@ def web():
     return web_app
 
 
-def _check_labels():
+def _check_labels(creds):
     # Call the Gmail API
     service = build("gmail", "v1", credentials=creds)
     results = service.users().labels().list(userId="me").execute()
