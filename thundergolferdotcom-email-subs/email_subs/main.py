@@ -279,13 +279,15 @@ def subscribe(email: str):
 
     if not email:
         raise HTTPException(status_code=400, detail="email cannot be empty")
-    # 1. check if email is already subscribed
-    # 2. send confirmation email if not
     send_confirmation_email.spawn(email=email)
     return {"message": f"Confirmation email sent to '{email}'"}
 
 
-@stub.asgi()
+@stub.asgi(
+    # Web app uses datastore to confirm subscriptions and fulfil
+    # unsubscriptions.
+    shared_volumes={CACHE_DIR: volume},
+)
 def web():
     web_app.add_middleware(
         CORSMiddleware,
