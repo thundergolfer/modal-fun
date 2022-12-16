@@ -158,7 +158,7 @@ def notify_subscribers_of_new_posts():
     for post in posts:
         if utc_age(post.published_datetime, now) > two_days_in_secs:
             # Defensively ignoring old blog posts. Likely shouldn't push these out.
-            print(f"'{post.title}' too old")
+            print(f"'{post.title}' too old 👴🏼")
             continue
         if post.link in seen_links:
             print(f"'{post.title}' already sent to subscribers")
