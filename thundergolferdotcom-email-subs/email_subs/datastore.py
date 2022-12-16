@@ -188,6 +188,12 @@ class Datastore:
             for row in rows
         ]
 
+    def delete_everything(self):
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM subscriber")
+            cursor.execute("DELETE FROM notification")
+
 
 def get_db(path: str) -> sqlite3.Connection:
     return sqlite3.connect(path)

@@ -91,6 +91,18 @@ def test_unsub(store):
     assert sub.unsubbed_at
 
 
+def test_list_subs(store):
+    test_emails = ["foo@gmail.com", "bar@yahoo.com"]
+    for email in test_emails:
+        sub = store.create_sub(email=email)
+        assert store.confirm_sub(
+            email=sub.email,
+            code=sub.confirm_code,
+        )
+
+    assert len(store.list_subs()) == 2
+
+
 def test_create_and_list_notifications(store):
     test_recipients = ["a@b.com", "jono@gmail.com"]
     n = store.create_notification(

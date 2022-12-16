@@ -10,7 +10,7 @@ def test_clock_fn():
     return datetime.fromtimestamp(0, tz=pytz.utc)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def store():
     db = sqlite3.connect(":memory:", detect_types=sqlite3.PARSE_DECLTYPES)
     datastore.init(db)
@@ -20,3 +20,4 @@ def store():
         clock_fn=test_clock_fn,
     )
     yield store
+    store.delete_everything()
