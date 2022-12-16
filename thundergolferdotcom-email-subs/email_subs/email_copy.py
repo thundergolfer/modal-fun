@@ -11,15 +11,17 @@ class EmailCopy(NamedTuple):
 
 
 def construct_new_blogpost_email(
+    blog_url: str,
+    blog_name: str,
     blog_titles: list[str],
     blog_links: list[str],
     unsubscribe_link: str,
+    twitter_url: str,
 ) -> EmailCopy:
-    twitter_url = "https://twitter.com/jonobelotti_IO"
     main_body = "\n".join(
         [
             "Hey,",
-            "Thanks for subscribing to <a href=''>thundergolfer.com/blog</a>, I've got a new blog post for you!"
+            f"Thanks for subscribing to <a href='{blog_url}'>{blog_name}</a>, I've got a new blog post for you!"
             "",
             f"<strong><em><a href='{blog_links[0]}'>{blog_titles[0]}</a></em></strong>",
             "",
@@ -45,13 +47,15 @@ def construct_new_blogpost_email(
     )
 
 
-def confirm_subscription_email(confirmation_link: str) -> EmailCopy:
+def confirm_subscription_email(
+    blog_name: str, blog_url: str, confirmation_link: str
+) -> EmailCopy:
     return EmailCopy(
-        subject="Confirm subscription to thundergolfer.com blog",
+        subject=f"Confirm subscription to {blog_name} blog",
         body=(
-            "To confirm your subscription to <a href='https://thundergolfer.com/'>thundergolfer.com/blog</a>, "
+            f"To confirm your subscription to <a href='{blog_url}/'>{blog_url}</a>, "
             f"please <strong><a href='{confirmation_link}'>click here</a></strong>.\n\n"
-            "If you didn't subscribe to <a href='https://thundergolfer.com/'>thundergolfer.com/blog</a>, "
+            f"If you didn't subscribe to <a href='{blog_url}'>{blog_name}</a>, "
             "please disregard this email.\n"
         ),
     )

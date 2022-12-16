@@ -27,6 +27,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
 ]
 
+modal_workspace_username = "thundergolfer"
 app_name = "thundergolferdotcom-email-subs"
 volume = modal.SharedVolume().persist(f"{app_name}-vol")
 image = modal.Image.debian_slim().pip_install_from_requirements(
@@ -45,10 +46,38 @@ def utc_age(dt: datetime, base: datetime) -> float:
     return (base - dt).total_seconds()
 
 
+class Config(NamedTuple):
+    """
+    Configuration for the app.
+    Change these values to be correct for your deployment.
+    """
+
+    # The website that from which your users do their subscription by calling the
+    # webhook. This value is used to setup CORS properly on the webhook.
+    personal_website_domain: str
+    # This is used as the FROM address in sent mail, and is associated with
+    # the authenticated GMail session.
+    maintainer_gmail_address: str
+    # The URL of the deployed Modal webhook. This URL is included in hyperlinks
+    # inserted into subscriber emails.
+    endpoint_url: str
+    # Used in setup and testing. Can be the same as the maintainer email address.
+    test_email_address: str
+
+
 class BlogEntry(NamedTuple):
     title: str
     link: str
     published_datetime: datetime
+
+
+config = Config(
+    personal_website_domain="thundergolfer.com",
+    maintainer_gmail_address="jonathon.i.belotti@gmail.com",
+    test_email_address="jonathon.bel.melbourne@gmail.com",
+    # TODO: Avoid hardcoding the deployment URL in config. Lookup at runtime?
+    endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
+)
 
 
 def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
@@ -156,10 +185,10 @@ def notify_subscribers_of_new_posts():
     )
     for subscriber in active_subs:
         code = subscriber.unsub_code
-        unsub_link = (
-            f"https://thundergolfer--{app_name}-web.modal.run/unsubscribe?code={code}"
-        )
+        unsub_link = f"{config.endpoint_url}/unsubscribe?code={code}"
         copy = email_copy.construct_new_blogpost_email(
+            blog_url=f"https://{config.personal_website_domain}",
+            blog_name=config.personal_website_domain,
             blog_links=[p.link for p in posts_for_notification],
             blog_titles=[p.title for p in posts_for_notification],
             unsubscribe_link=unsub_link,
@@ -168,7 +197,7 @@ def notify_subscribers_of_new_posts():
             sender=sender,
             subject=copy.subject,
             content=copy.body,
-            from_addr="jonathon.i.belotti@gmail.com",
+            from_addr=config.maintainer_gmail_address,
             recipient=subscriber.email,
         )
     print("✅ Done!")
@@ -199,14 +228,18 @@ def send_confirmation_email(email: str):
     subscriber = store.create_sub(email=email)
     code = subscriber.confirm_code
     # TODO: Handle URLs properly for dev vs. prod.
-    confirm_link = f"https://thundergolfer--{app_name}-web.modal.run/confirm?email={subscriber.email}&code={code}"
+    confirm_link = f"{config.endpoint_url}/confirm?email={subscriber.email}&code={code}"
     sender = emailer.GmailSender(creds)
-    copy = email_copy.confirm_subscription_email(confirm_link)
+    copy = email_copy.confirm_subscription_email(
+        blog_name=config.personal_website_domain,
+        blog_url=f"https://{config.personal_website_domain}/blog",
+        confirmation_link=confirm_link,
+    )
     emailer.send(
         sender=sender,
         subject=copy.subject,
         content=copy.body,
-        from_addr="jonathon.i.belotti@gmail.com",
+        from_addr=config.maintainer_gmail_address,
         recipient=subscriber.email,
     )
 
@@ -284,16 +317,17 @@ def subscribe(email: str):
 
 
 @stub.asgi(
-    # Web app uses datastore to confirm subscriptions and fulfil
-    # unsubscriptions.
+    # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
     shared_volumes={CACHE_DIR: volume},
 )
 def web():
     web_app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://thundergolfer.com",
-            "https://thundergolfer.com",
+            f"http://{config.personal_website_domain}",
+            f"https://{config.personal_website_domain}",
+            # Localhost used for development and testing.
+            # You may need to change the PORT to something else.
             "http://localhost:4000",
             "http://localhost:4000/",
             "localhost:4000",
@@ -349,18 +383,14 @@ def main():
             sender=sender,
             subject="Testy McTestFace",
             content="Hello from Modal script!",
-            from_addr="jonathon.i.belotti@gmail.com",
+            from_addr=config.maintainer_gmail_address,
             recipients=[
-                "jonathon@modal.com",
+                config.test_email_address,  # Send to yourself
             ],
         )
     except HttpError as error:
-        # TODO(developer) - Handle errors from gmail API.
         print(f"An error occurred: {error}")
 
 
 if __name__ == "__main__":
-    # main()
     stub.serve()
-    # with stub.run():
-    #     notify_subscribers_of_new_posts.call()
