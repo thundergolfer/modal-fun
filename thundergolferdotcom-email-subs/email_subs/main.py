@@ -167,6 +167,7 @@ def notify_subscribers_of_new_posts():
 
     if not posts_for_notification:
         print(f"No new posts @ {now}. Done for now.")
+        return
     else:
         print(
             f"Found {len(posts_for_notification)} recent posts not yet sent to subscribers."
