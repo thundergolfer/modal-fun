@@ -34,7 +34,6 @@ image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
 )
 stub = modal.Stub(name=app_name, image=image)
-stub.confirmation_code_to_email = modal.Dict()
 web_app = FastAPI()
 
 
