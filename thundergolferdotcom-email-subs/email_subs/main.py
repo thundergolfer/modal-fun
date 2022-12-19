@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import sys
 from datetime import datetime, timezone
 from typing import NamedTuple
 
@@ -341,21 +342,7 @@ def web():
     return web_app
 
 
-def _check_labels(creds):
-    # Call the Gmail API
-    service = build("gmail", "v1", credentials=creds)
-    results = service.users().labels().list(userId="me").execute()
-    labels = results.get("labels", [])
-
-    if not labels:
-        print("No labels found.")
-        return
-    print("Labels:")
-    for label in labels:
-        print(label["name"])
-
-
-def main():
+def create_refresh_token_and_test_creds():
     """
     Shows basic usage of the Gmail API.
     Lists the user's Gmail labels.
@@ -393,4 +380,12 @@ def main():
 
 
 if __name__ == "__main__":
-    stub.serve()
+    if len(sys.argv) == 2 and sys.argv[1] == "create-refresh-token":
+        with stub.run():
+            create_refresh_token_and_test_creds()
+    elif len(sys.argv) == 0:
+        stub.serve()
+    else:
+        print(
+            "usage: python3 -m email_subs.main [create-refresh-token]", file=sys.stderr
+        )
