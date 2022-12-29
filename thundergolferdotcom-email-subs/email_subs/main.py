@@ -83,6 +83,21 @@ config = Config(
 )
 
 
+def fetch_fresh_gmail_creds_from_env():
+    creds = Credentials.from_authorized_user_info(
+        info={
+            "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
+            "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
+            "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
+        },
+        scopes=SCOPES,
+    )
+    if creds and creds.expired and creds.refresh_token:
+        print("Refreshing credentials...")
+        creds.refresh(Request())
+    return creds
+
+
 def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
     import feedparser
 
@@ -129,7 +144,9 @@ def reset_db(notifications=False, subs=False):
         print("Deleted everything.")
     elif notifications:
         store.delete_notifications()
-        print(f"Deleted notifications. There are now {len(store.list_notifications())} notifications.")
+        print(
+            f"Deleted notifications. There are now {len(store.list_notifications())} notifications."
+        )
     else:
         print("Deleting nothing.")
 
@@ -147,14 +164,7 @@ def notify_subscribers_of_new_posts():
     sends email notifications to all confirmed subscribers.
     """
     # Create emailer
-    creds = Credentials.from_authorized_user_info(
-        info={
-            "refresh_token": os.environ["GMAIL_AUTH_REFRESH_TOKEN"],
-            "client_id": os.environ["GMAIL_AUTH_CLIENT_ID"],
-            "client_secret": os.environ["GMAIL_AUTH_CLIENT_SECRET"],
-        },
-        scopes=SCOPES,
-    )
+    creds = fetch_fresh_gmail_creds_from_env()
     sender = emailer.GmailSender(creds)
 
     conn = datastore.get_db(DB_PATH)
