@@ -398,9 +398,7 @@ def create_refresh_token_and_test_creds():
             subject="Testy McTestFace",
             content="Hello from Modal script!",
             from_addr=config.maintainer_gmail_address,
-            recipients=[
-                config.test_email_address,  # Send to yourself
-            ],
+            recipient=config.test_email_address,  # Send to yourself
         )
     except HttpError as error:
         print(f"An error occurred: {error}")
