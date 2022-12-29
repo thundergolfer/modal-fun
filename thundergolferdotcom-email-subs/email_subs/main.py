@@ -63,6 +63,8 @@ class Config(NamedTuple):
     endpoint_url: str
     # Used in setup and testing. Can be the same as the maintainer email address.
     test_email_address: str
+    # Used in email copy
+    twitter_username: str
 
 
 class BlogEntry(NamedTuple):
@@ -77,6 +79,7 @@ config = Config(
     test_email_address="jonathon.bel.melbourne@gmail.com",
     # TODO: Avoid hardcoding the deployment URL in config. Lookup at runtime?
     endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
+    twitter_username="jonobelotti_IO",
 )
 
 
@@ -193,6 +196,7 @@ def notify_subscribers_of_new_posts():
             blog_links=[p.link for p in posts_for_notification],
             blog_titles=[p.title for p in posts_for_notification],
             unsubscribe_link=unsub_link,
+            twitter_url=f"https://twitter.com/{config.twitter_username}",
         )
         emailer.send(
             sender=sender,
