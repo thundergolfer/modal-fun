@@ -24,8 +24,8 @@ def construct_new_blogpost_email(
             f"Thanks for subscribing to <a href='{blog_url}'>{blog_name}</a>, I've got a new blog post for you!"
             "",
             f"<strong><em><a href='{blog_links[0]}'>{blog_titles[0]}</a></em></strong>",
-            "",
-            "If you like it or have any feedback, I'm always happy to hear from you."
+            "<br><br>",
+            "If you like it or have any feedback, I'm always happy to hear from you. "
             f"I'm reachable on <a href='{twitter_url}'>Twitter</a> and at this email address.",
         ]
     )
@@ -37,6 +37,7 @@ def construct_new_blogpost_email(
         bonus_part = ""
 
     unsub_part = (
+        "<br><br>"
         "If you'd like to stop receiving these emails, "
         f"<a href='{unsubscribe_link}'>click here to unsubscribe</a>."
     )
