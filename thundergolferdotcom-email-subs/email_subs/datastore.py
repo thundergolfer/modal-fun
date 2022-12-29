@@ -188,6 +188,11 @@ class Datastore:
             for row in rows
         ]
 
+    def delete_notifications(self):
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM notification")
+
     def delete_everything(self):
         with self.conn:
             cursor = self.conn.cursor()

@@ -113,12 +113,25 @@ def setup_db():
 
 
 @stub.function(shared_volumes={CACHE_DIR: volume})
-def reset_db():
+def reset_db(notifications=False, subs=False):
     """
     ⚠️ Only use during testing. Don't reset production DB as it could cause
     duplication notifications to be sent to subscribers.
     """
-    raise NotImplementedError()
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid.uuid4()),
+        clock_fn=lambda: datetime.now(timezone.utc),
+    )
+    if notifications and subs:
+        store.delete_everything()
+        print("Deleted everything.")
+    elif notifications:
+        store.delete_notifications()
+        print(f"Deleted notifications. There are now {len(store.list_notifications())} notifications.")
+    else:
+        print("Deleting nothing.")
 
 
 @stub.function(
