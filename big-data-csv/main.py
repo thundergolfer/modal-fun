@@ -11,13 +11,11 @@ import modal
 
 stub = modal.Stub("big-data-csv")
 image = modal.Image.debian_slim().pip_install(
-    [
-        "boto3",
-        "dask",
-        "pandas",
-        "pyarrow",
-        "s3fs",
-    ]
+    "boto3",
+    "dask",
+    "pandas",
+    "pyarrow",
+    "s3fs",
 )
 
 
@@ -70,7 +68,7 @@ def upload_part(bucket, key, upload_id, part_num, size_mb):
 
     s3_resource = boto3.resource("s3")
     print(f"Uploading part {part_num} for upload ID {upload_id}")
-    upload_part = s3_resource.MultipartUploadPart(
+    part = s3_resource.MultipartUploadPart(
         bucket,
         key,
         upload_id,
@@ -79,7 +77,7 @@ def upload_part(bucket, key, upload_id, part_num, size_mb):
 
     part_data = fake_csv_data(size_mb=size_mb)
     print(f"Part {part_num} is {sys.getsizeof(part_data)} bytes")
-    part_response = upload_part.upload(
+    part_response = part.upload(
         Body=part_data,
     )
     return (part_num, part_response)
@@ -212,12 +210,12 @@ if __name__ == "__main__":
         print(f"{app.app_id=}")
 
         # start = time.time()
-        # upload_fake_csv(desired_mb=90_000)
+        # upload_fake_csv(desired_mb=10_000)
         # end = time.time()
         # print(f"Created fake data in {end - start} seconds.")
 
         print("Running fast...")
         start = time.time()
-        count = count_by_filter_fast(bucket="temp-big-data-csv", key="90000_mb.csv")
+        count = count_by_filter_fast.call(bucket="temp-big-data-csv", key="10000_mb.csv")
         end = time.time()
         print(f"Returned {count=} in {end - start} seconds.")
