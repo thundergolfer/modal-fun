@@ -23,9 +23,8 @@ python3 main.py
 ⠋ Running app...
 ```
 
-
 ### Deployment
 
 ```bash
-modal app deploy main.py
+modal deploy main.py
 ```

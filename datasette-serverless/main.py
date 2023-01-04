@@ -104,7 +104,7 @@ def download_dataset(force=False):
 
 @stub.function(schedule=modal.Period(hours=12))
 def refresh_db():
-    """A Modal scheduled function that's (re)created on every `modal app deploy`."""
+    """A Modal scheduled function that's (re)created on every `modal deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
     download_dataset.call(force=True)
     prep_db.call()

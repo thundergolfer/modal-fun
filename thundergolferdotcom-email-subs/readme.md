@@ -62,5 +62,5 @@ feed to sending an email to a test email account.
 
 ```sh
 cd thundergolferdotcom-email-subs/
-modal app deploy email_subs.main
+modal deploy email_subs.main
 ```
