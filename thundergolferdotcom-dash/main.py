@@ -103,8 +103,8 @@ def create_spotify_refresh_token(code: str):
     return json.load(response)["refresh_token"]
 
 
-def manual_spotify_auth() -> None:
-    """Instrunctions: https://leerob.io/blog/spotify-api-nextjs"""
+def manual_spotify_auth():
+    """Instructions: https://leerob.io/blog/spotify-api-nextjs"""
     redirect_uri = urllib.parse.quote(
         "http://localhost:3000/callback", safe=""
     )  # This must match what's in the Spotify app's settings
@@ -118,14 +118,14 @@ def manual_spotify_auth() -> None:
         f"Visit {authorize_url} and then paste back the resulting code in the URL.\nCode: "
     ).strip()
     with stub.run():
-        refresh_token = create_spotify_refresh_token(code)
+        refresh_token = create_spotify_refresh_token.call(code)
     print(f"SPOTIFY_REFRESH_TOKEN: {refresh_token}")
     print(
         "Save the refresh_token back into the `spotify-aboutme` secret in Modal as SPOTIFY_REFRESH_TOKEN"
     )
+    exit(0)
 
 
-@stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
 def request_spotify_top_tracks(max_tracks=5) -> list[SpotifyTrack]:
     client_auth = (
         os.environ["SPOTIFY_CLIENT_ID"] + ":" + os.environ["SPOTIFY_CLIENT_SECRET"]
@@ -234,7 +234,7 @@ def about_me():
 
     stats = AboutMeStats(
         spotify=request_spotify_top_tracks(),
-        goodreads=request_goodreads_reads(),
+        goodreads=request_goodreads_reads.call(),
         # TODO: Actually populate this data.
         twitter=TwitterInfo(
             display_name="Jonathon Belotti",
@@ -258,7 +258,7 @@ def about_me():
 @web_app.get("/")
 def hook(response: Response):
     response.headers["Cache-Control"] = f"max-age={CACHE_TIME_SECS}"
-    return about_me()
+    return about_me.call()
 
 
 @stub.asgi
@@ -282,11 +282,11 @@ def web():
 
 
 if __name__ == "__main__":
-    stub.serve()
+    # Uncomment when needing to setup Spotify app auth for 1st time.
     # manual_spotify_auth()
 
-    # with stub.run():
-    #     print(request_goodreads_reads())
+    stub.serve()
 
+    # (manually test fn without going through webhook)
     # with stub.run():
-    # request_spotify_top_tracks()
+    #     print(about_me.call())
