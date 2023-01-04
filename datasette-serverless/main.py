@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import csv
 import enum
 import itertools
@@ -15,11 +16,9 @@ stub = modal.Stub("modal-datasette-covid")
 datasette_image = (
     modal.Image.debian_slim()
     .pip_install(
-        [
-            "datasette",
-            "sqlite-utils",
-            "GitPython",
-        ]
+        "datasette~=0.63.2",
+        "sqlite-utils",
+        "GitPython",
     )
     .apt_install(["git"])
 )
@@ -57,8 +56,6 @@ def load_daily_reports():
 
 
 def load_report(filepath):
-    import csv
-
     mm, dd, yyyy = filepath.stem.split("-")
     with filepath.open() as fp:
         for row in csv.DictReader(fp):
@@ -109,8 +106,8 @@ def download_dataset(force=False):
 def refresh_db():
     """A Modal scheduled function that's (re)created on every `modal app deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
-    download_dataset(force=True)
-    prep_db()
+    download_dataset.call(force=True)
+    prep_db.call()
 
 
 @stub.function(
@@ -168,7 +165,9 @@ def app():
     """Returns the Datasette app's ASGI web application object, so that Modal can you it to serve a webhook."""
     from datasette.app import Datasette
 
-    return Datasette(files=[DB_PATH]).app()
+    ds = Datasette(files=[DB_PATH])
+    asyncio.run(ds.invoke_startup())
+    return ds.app()
 
 
 def parse_args() -> Command:
@@ -200,9 +199,9 @@ if __name__ == "__main__":
 
     with stub.run():
         if cmd.subcommand == Subcommand.QUERY:
-            query_db(cmd.args.sql)
+            query_db.call(cmd.args.sql)
         elif cmd.subcommand == Subcommand.PREP:
-            download_dataset()
+            download_dataset.call()
             prep_db()
         else:
             raise AssertionError(f"{cmd.subcommand} subparse not valid.")
