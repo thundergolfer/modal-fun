@@ -9,21 +9,18 @@ For example: When was the last time a team made the top-4 with a percentage unde
 import argparse
 import datetime
 import enum
-import logging
 import pathlib
 import sys
 
 from typing import Any, NamedTuple
 
 import httpx
-import pytz
-import sqlite_utils
 from loguru import logger
 
 import modal
 
 
-app_image = modal.DebianSlim().pip_install(
+app_image = modal.Image.debian_slim().pip_install(
     ["httpx==0.23.0", "pytz==2022.2.1", "sqlite-utils==3.29", "loguru==0.6.0"]
 )
 stub = modal.Stub("modal-datasette-afl", image=app_image)
