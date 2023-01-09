@@ -4,7 +4,7 @@ Want to build an email list of people who want to be notified of new blog posts 
 This app can help :)
 
 I like freemium email newsletter services such as [Buttondown.email](https://buttondown.email/), but I didn't
-won't set up another Zapier integration just to hook up with my existing blog RSS feed.
+want to set up another Zapier integration just to hook up with my existing blog RSS feed.
 
 This serverless application deploys as a simple FastAPI web app and SQLite DB, all on Modal. It uses GMail's
 API to drive emails, which should work nicely up to around 1000 subscribers if you don't spam.
