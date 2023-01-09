@@ -17,7 +17,7 @@ for your own personal blog, you'll just need two things:
 1. A [Modal](https://modal.com) account
 2. A Gmail account
 
-If you have those two things, follow this [how-to blog post](https://TODO.com) (TODO) which will
+If you have those two things, follow this [**how-to blog post**](https://thundergolfer.com/modal/newsletter/email/2023/01/09/email-subscribers-with-modal/) which will
 help with setting up GMail authentication and deploying the Python code on Modal.
 
 ## Development
