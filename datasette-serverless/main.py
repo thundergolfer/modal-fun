@@ -102,7 +102,7 @@ def download_dataset(force=False):
     git.Repo.clone_from(git_url, REPO_DIR, depth=1)
 
 
-@stub.function(schedule=modal.Period(hours=12))
+@stub.function(schedule=modal.Period(hours=12), timeout=900)
 def refresh_db():
     """A Modal scheduled function that's (re)created on every `modal deploy`."""
     print(f"Running scheduled refresh at {utc_now()}")
@@ -113,6 +113,7 @@ def refresh_db():
 @stub.function(
     image=datasette_image,
     shared_volumes={CACHE_DIR: volume},
+    timeout=900,
 )
 def prep_db():
     import shutil
