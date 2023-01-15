@@ -1,6 +1,8 @@
 import time
 import modal
 
+from .config import USER_SETTINGS
+
 image = modal.Image.debian_slim().pip_install("httpx", "loguru", "psycopg2-binary")
 stub = modal.Stub(
     name="post-archiver", 
@@ -94,6 +96,6 @@ def main():
             conn.close()
             print('Database connection closed.')
     
-    ingest_hn_comments("thundergolfer")
+    ingest_hn_comments(USER_SETTINGS.hackernews_username)
 
     print("Done!")
