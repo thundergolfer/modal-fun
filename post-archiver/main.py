@@ -1,6 +1,7 @@
+import time
 import modal
 
-image = modal.Image.debian_slim().pip_install("loguru", "psycopg2-binary")
+image = modal.Image.debian_slim().pip_install("httpx", "loguru", "psycopg2-binary")
 stub = modal.Stub(
     name="post-archiver", 
     image=image, 
@@ -42,11 +43,39 @@ def db_config_from_env() -> dict[str, str]:
     }
 
 
+def ingest_hn_comments(user: str):
+    """
+    Use the user API endpoint to get a user's full list of comments and submissions,
+    and then filter for comments and ingest only new comments.
+    {
+        about: "Currently Data Engineering at Canva. Previously at Zendesk and Atlassian.<p>Sydney, Australia",
+        created: 1500343271,
+        id: "thundergolfer",
+        karma: 970,
+        submitted: [23736822, 23736800, ...]
+    }
+    """
+    import httpx
+
+    url = f"https://hacker-news.firebaseio.com/v0/user/{user}.json"
+    response = httpx.get(url)
+    user_data = response.json()
+    submissions = user_data["submitted"]
+    for sub in submissions:
+        item_url = f"https://hacker-news.firebaseio.com/v0/item/{sub}.json"
+        item_response = httpx.get(item_url)
+        item_data = item_response.json()
+        if item_data["type"] == "comment":
+            print("found comment")
+            print(item_data)
+        else:
+            print("not comment! ⚠️")
+        time.sleep(0.5)
+
+
 @stub.function()
 def main():
     import psycopg2
-    print("hello world")
-
     conn = None
     try:
         print('Connecting to the PostgreSQL database...')
@@ -64,5 +93,7 @@ def main():
         if conn is not None:
             conn.close()
             print('Database connection closed.')
+    
+    ingest_hn_comments("thundergolfer")
 
     print("Done!")
