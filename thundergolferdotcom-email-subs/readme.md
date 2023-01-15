@@ -1,3 +1,7 @@
+<p align="center" width="300px">
+  <img src="https://user-images.githubusercontent.com/12058921/212502857-dec4b39f-9c24-45d4-ae34-89e6b19c4ba7.png"/>
+</p>
+
 <h1 align="center">thundergolfer.com email subscribers app</h1>
 
 Want to build an email list of people who want to be notified of new blog posts you publish?
