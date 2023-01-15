@@ -1,5 +1,5 @@
-<p align="center" width="300px">
-  <img src="https://user-images.githubusercontent.com/12058921/212502857-dec4b39f-9c24-45d4-ae34-89e6b19c4ba7.png"/>
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/12058921/212502930-b4c825af-e79b-4308-a520-f81426cb5995.png"/>
 </p>
 
 <h1 align="center">thundergolfer.com email subscribers app</h1>
