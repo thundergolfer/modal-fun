@@ -61,6 +61,8 @@ class Config(NamedTuple):
     # The URL of the deployed Modal webhook. This URL is included in hyperlinks
     # inserted into subscriber emails.
     endpoint_url: str
+    # URL for blog's RSS feed
+    rss_feed_url: str
     # Used in setup and testing. Can be the same as the maintainer email address.
     test_email_address: str
     # Used in email copy
@@ -76,6 +78,7 @@ class BlogEntry(NamedTuple):
 config = Config(
     personal_website_domain="thundergolfer.com",
     maintainer_gmail_address="jonathon.i.belotti@gmail.com",
+    rss_feed_url="https://thundergolfer.com/feed.xml",
     test_email_address="jonathon.bel.melbourne@gmail.com",
     # TODO: Avoid hardcoding the deployment URL in config. Lookup at runtime?
     endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
@@ -101,7 +104,7 @@ def fetch_fresh_gmail_creds_from_env():
 def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
     import feedparser
 
-    feed = feedparser.parse("https://thundergolfer.com/feed.xml")
+    feed = feedparser.parse(config.rss_feed_url)
     return [
         BlogEntry(
             title=entry["title"],
