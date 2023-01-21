@@ -37,7 +37,9 @@ todo
 
 ### Running
 
-todo
+```
+modal run post_archiver.main
+```
 
 ### Testing
 

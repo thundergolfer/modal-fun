@@ -2,34 +2,32 @@ import time
 import modal
 
 from .config import USER_SETTINGS
+from .datastore import create_db_tables
 
-image = modal.Image.debian_slim().pip_install("httpx", "loguru", "psycopg2-binary")
+image = modal.Image.debian_slim().pip_install(
+    "httpx", "loguru", "psycopg2-binary", "sqlalchemy"
+)
 stub = modal.Stub(
-    name="post-archiver", 
-    image=image, 
-    secrets=[modal.Secret.from_name("neondb")]
+    name="post-archiver", image=image, secrets=[modal.Secret.from_name("neondb")]
 )
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': '<dbname>',
-        'USER': '<user>',
-        'PASSWORD': '<password>',
-        'HOST': '<endpoint_hostname>',
-        'PORT': '<port>',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "<dbname>",
+        "USER": "<user>",
+        "PASSWORD": "<password>",
+        "HOST": "<endpoint_hostname>",
+        "PORT": "<port>",
     }
 }
 
 
 def db_config_from_env() -> dict[str, str]:
-    required_keys = {'PGHOST', 'PGDATABASE', 'PGUSER', "PGPASSWORD"}
+    required_keys = {"PGHOST", "PGDATABASE", "PGUSER", "PGPASSWORD"}
     import os
-    extracted_env = {
-        k: os.environ[k]
-        for k in required_keys
-        if k in os.environ
-    }
+
+    extracted_env = {k: os.environ[k] for k in required_keys if k in os.environ}
 
     missing_keys = required_keys - set(extracted_env.keys())
     if missing_keys:
@@ -38,11 +36,7 @@ def db_config_from_env() -> dict[str, str]:
             "Did you forget to add a modal.Secret, or are some keys missing from "
             "the provided modal.Secret?"
         )
-    return {
-        k.replace("PG", "").lower(): v
-        for k, v
-        in extracted_env.items()
-    }
+    return {k.replace("PG", "").lower(): v for k, v in extracted_env.items()}
 
 
 def ingest_hn_comments(user: str):
@@ -78,24 +72,28 @@ def ingest_hn_comments(user: str):
 @stub.function()
 def main():
     import psycopg2
+
     conn = None
     try:
-        print('Connecting to the PostgreSQL database...')
-        conn = psycopg2.connect(**db_config_from_env())
+        db_config = db_config_from_env()
+        print("Connecting to the PostgreSQL database...")
+        conn = psycopg2.connect(**db_config)
         cur = conn.cursor()
-        
-        print('PostgreSQL database version:')
-        cur.execute('SELECT version()')
+
+        print("PostgreSQL database version:")
+        cur.execute("SELECT version()")
         db_version = cur.fetchone()
         print(db_version)
+
+        print("Creating DB tables")
+        create_db_tables(db_config)
+
         cur.close()
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
     finally:
         if conn is not None:
             conn.close()
-            print('Database connection closed.')
-    
+            print("Database connection closed.")
+
     ingest_hn_comments(USER_SETTINGS.hackernews_username)
 
     print("Done!")

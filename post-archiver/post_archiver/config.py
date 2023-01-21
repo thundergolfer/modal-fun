@@ -1,5 +1,6 @@
 from typing import Optional, NamedTuple
 
+
 class UserSettings(NamedTuple):
     reddit_username: Optional[str] = None
     hackernews_username: Optional[str] = None
