@@ -1,8 +1,10 @@
 import time
+from datetime import datetime
+
 import modal
 
 from .config import USER_SETTINGS
-from .datastore import create_db_tables
+from .datastore import create_db_tables, make_id
 
 image = modal.Image.debian_slim().pip_install(
     "httpx", "loguru", "psycopg2-binary", "sqlalchemy"
@@ -57,6 +59,10 @@ def ingest_hn_comments(user: str):
     response = httpx.get(url)
     user_data = response.json()
     submissions = user_data["submitted"]
+
+    comment_batch = []
+    max_batch_size = 10
+
     for sub in submissions:
         item_url = f"https://hacker-news.firebaseio.com/v0/item/{sub}.json"
         item_response = httpx.get(item_url)
@@ -64,8 +70,21 @@ def ingest_hn_comments(user: str):
         if item_data["type"] == "comment":
             print("found comment")
             print(item_data)
+            comment_batch.append(
+                {
+                    "user_id": item_data["by"],
+                    "id": make_id(type="hn"),
+                    "body": item_data["text"],
+                    "created_at": datetime.utcfromtimestamp(item_data["time"]),
+                }
+            )
         else:
             print("not comment! ⚠️")
+
+        if len(comment_batch) == max_batch_size:
+            print("Inserting comment batch into DB.")
+            # TODO: Insert the comment batch.
+            comment_batch = []
         time.sleep(0.5)
 
 

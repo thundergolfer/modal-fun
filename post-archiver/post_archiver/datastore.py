@@ -14,6 +14,11 @@ from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
 
+def make_id(type: str) -> str:
+    # TODO: type should be an enum.
+    raise NotImplementedError()
+
+
 class HnComment(Base):
     __tablename__ = "hn_comment"
     id = Column(String(), primary_key=True)
