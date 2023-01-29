@@ -60,7 +60,7 @@ class Config(NamedTuple):
     maintainer_gmail_address: str
     # The URL of the deployed Modal webhook. This URL is included in hyperlinks
     # inserted into subscriber emails.
-    endpoint_url: str
+    # endpoint_url: str
     # URL for blog's RSS feed
     rss_feed_url: str
     # Used in setup and testing. Can be the same as the maintainer email address.
@@ -81,7 +81,7 @@ config = Config(
     rss_feed_url="https://thundergolfer.com/feed.xml",
     test_email_address="jonathon.bel.melbourne@gmail.com",
     # TODO: Avoid hardcoding the deployment URL in config. Lookup at runtime?
-    endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
+    # endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
     twitter_username="jonobelotti_IO",
 )
 
@@ -101,10 +101,10 @@ def fetch_fresh_gmail_creds_from_env():
     return creds
 
 
-def fetch_my_blog_posts_from_rss() -> list[BlogEntry]:
+def fetch_blog_posts_from_rss(feed_url: str) -> list[BlogEntry]:
     import feedparser
 
-    feed = feedparser.parse(config.rss_feed_url)
+    feed = feedparser.parse(feed_url)
     return [
         BlogEntry(
             title=entry["title"],
@@ -154,17 +154,11 @@ def reset_db(notifications=False, subs=False):
         print("Deleting nothing.")
 
 
-@stub.function(
-    # Check relatively frequently for new posts, because subscribers should
-    # be among first to hear of a new post.
-    schedule=modal.Period(hours=3),
-    shared_volumes={CACHE_DIR: volume},
-    secret=modal.Secret.from_name("gmail"),
-)
-def notify_subscribers_of_new_posts():
+def notify_subscribers_of_new_posts_impl(feed_url):
     """
-    Cronjob function that checks for new blog posts and if a new one is found
-    sends email notifications to all confirmed subscribers.
+    Implementation broken out to facilitate testing.
+
+    TODO: Merge back into scheduled modal.Function when those support parameters.
     """
     # Create emailer
     creds = fetch_fresh_gmail_creds_from_env()
@@ -182,7 +176,7 @@ def notify_subscribers_of_new_posts():
     now = utc_now()
     two_days_in_secs = 60 * 60 * 24 * 2
     posts_for_notification: list[BlogEntry] = []
-    posts = fetch_my_blog_posts_from_rss()
+    posts = fetch_blog_posts_from_rss(feed_url)
     print(f"Got {len(posts)} from RSS feed.")
     for post in posts:
         if utc_age(post.published_datetime, now) > two_days_in_secs:
@@ -213,9 +207,10 @@ def notify_subscribers_of_new_posts():
     print(
         f"Sending new post notification email to {len(active_subs)} active email subscribers."
     )
+    live_web_url = web.web_url
     for subscriber in active_subs:
         code = subscriber.unsub_code
-        unsub_link = f"{config.endpoint_url}/unsubscribe?code={code}&email={subscriber.email}"
+        unsub_link = f"{live_web_url}/unsubscribe?code={code}&email={subscriber.email}"
         copy = email_copy.construct_new_blogpost_email(
             blog_url=f"https://{config.personal_website_domain}",
             blog_name=config.personal_website_domain,
@@ -232,6 +227,21 @@ def notify_subscribers_of_new_posts():
             recipient=subscriber.email,
         )
     print("✅ Done!")
+
+
+@stub.function(
+    # Check relatively frequently for new posts, because subscribers should
+    # be among first to hear of a new post.
+    schedule=modal.Period(hours=3),
+    shared_volumes={CACHE_DIR: volume},
+    secret=modal.Secret.from_name("gmail"),
+)
+def notify_subscribers_of_new_posts():
+    """
+    Cronjob function that checks for new blog posts and if a new one is found
+    sends email notifications to all confirmed subscribers.
+    """
+    notify_subscribers_of_new_posts_impl(config.feed_url)
 
 
 @stub.function(
@@ -258,8 +268,8 @@ def send_confirmation_email(email: str):
 
     subscriber = store.create_sub(email=email)
     code = subscriber.confirm_code
-    # TODO: Handle URLs properly for dev vs. prod.
-    confirm_link = f"{config.endpoint_url}/confirm?email={subscriber.email}&code={code}"
+    live_web_url = web.web_url
+    confirm_link = f"{live_web_url}/confirm?email={subscriber.email}&code={code}"
     sender = emailer.GmailSender(creds)
     copy = email_copy.confirm_subscription_email(
         blog_name=config.personal_website_domain,

@@ -59,8 +59,9 @@ python3 -m pytest
 
 **Integration**
 
-_Coming soon_. I'd like to have a test that goes end-to-end, from checking an RSS
-feed to sending an email to a test email account.
+```sh
+python3 -m tests.integration.end_to_end
+```
 
 ## Deploy
 
