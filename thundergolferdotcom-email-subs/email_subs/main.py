@@ -215,7 +215,7 @@ def notify_subscribers_of_new_posts():
     )
     for subscriber in active_subs:
         code = subscriber.unsub_code
-        unsub_link = f"{config.endpoint_url}/unsubscribe?code={code}"
+        unsub_link = f"{config.endpoint_url}/unsubscribe?code={code}&email={subscriber.email}"
         copy = email_copy.construct_new_blogpost_email(
             blog_url=f"https://{config.personal_website_domain}",
             blog_name=config.personal_website_domain,
