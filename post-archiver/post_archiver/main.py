@@ -4,7 +4,14 @@ from datetime import datetime
 import modal
 
 from .config import USER_SETTINGS
-from .datastore import create_db_tables, make_id
+from .datastore import (
+    bulk_insert,
+    create_db_tables,
+    get_engine,
+    make_id,
+    HnComment,
+    PostType,
+)
 
 image = modal.Image.debian_slim().pip_install(
     "httpx", "loguru", "psycopg2-binary", "sqlalchemy"
@@ -41,7 +48,7 @@ def db_config_from_env() -> dict[str, str]:
     return {k.replace("PG", "").lower(): v for k, v in extracted_env.items()}
 
 
-def ingest_hn_comments(user: str):
+def ingest_hn_comments(user: str, engine):
     """
     Use the user API endpoint to get a user's full list of comments and submissions,
     and then filter for comments and ingest only new comments.
@@ -73,7 +80,8 @@ def ingest_hn_comments(user: str):
             comment_batch.append(
                 {
                     "user_id": item_data["by"],
-                    "id": make_id(type="hn"),
+                    "id": make_id(post_type=PostType.HN),
+                    "hn_id": item_data["id"],
                     "body": item_data["text"],
                     "created_at": datetime.utcfromtimestamp(item_data["time"]),
                 }
@@ -83,7 +91,7 @@ def ingest_hn_comments(user: str):
 
         if len(comment_batch) == max_batch_size:
             print("Inserting comment batch into DB.")
-            # TODO: Insert the comment batch.
+            bulk_insert(engine=engine, table=HnComment, comments=comment_batch)
             comment_batch = []
         time.sleep(0.5)
 
@@ -104,6 +112,9 @@ def main():
         db_version = cur.fetchone()
         print(db_version)
 
+        print("Getting engine")
+        engine = get_engine(db_config)
+
         print("Creating DB tables")
         create_db_tables(db_config)
 
@@ -113,6 +124,6 @@ def main():
             conn.close()
             print("Database connection closed.")
 
-    ingest_hn_comments(USER_SETTINGS.hackernews_username)
+    ingest_hn_comments(user=USER_SETTINGS.hackernews_username, engine=engine)
 
     print("Done!")
