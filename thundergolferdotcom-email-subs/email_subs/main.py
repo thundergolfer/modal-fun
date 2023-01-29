@@ -207,10 +207,10 @@ def notify_subscribers_of_new_posts_impl(feed_url):
     print(
         f"Sending new post notification email to {len(active_subs)} active email subscribers."
     )
+    live_web_url = web.web_url
     for subscriber in active_subs:
         code = subscriber.unsub_code
-        live_web_url = web.web_url
-        unsub_link = f"{live_web_url}/unsubscribe?code={code}"
+        unsub_link = f"{live_web_url}/unsubscribe?code={code}&email={subscriber.email}"
         copy = email_copy.construct_new_blogpost_email(
             blog_url=f"https://{config.personal_website_domain}",
             blog_name=config.personal_website_domain,
