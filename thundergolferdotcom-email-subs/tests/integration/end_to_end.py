@@ -1,7 +1,6 @@
 import base64
 import email
 import email.utils
-import pathlib
 import re
 import time
 import uuid
