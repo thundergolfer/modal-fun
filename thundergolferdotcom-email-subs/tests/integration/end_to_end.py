@@ -70,7 +70,7 @@ def fetch_recent_emails(n: int = 3) -> list[str]:
             print("Email had no body data.")
             body_text = ""
         else:
-            body_text = base64.b64decode((r["payload"]["body"]["data"]))
+            body_text = base64.b64decode((r["payload"]["body"]["data"])).decode()
         message_bodies.append(Message(body=body_text, snippet=r["snippet"]))
     return message_bodies
 
