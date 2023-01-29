@@ -1,12 +1,12 @@
 import base64
 import email
-import email.parser
 import email.utils
+import pathlib
 import re
 import time
 import uuid
-import pathlib
 from datetime import datetime, timedelta, timezone
+from email.message import Message
 from typing import Optional
 
 import modal
@@ -24,23 +24,28 @@ from email_subs.main import (
     web,
 )
 
-test_app_name = app_name + "-test"
-test_image = image.pip_install("httpx")
-volume = modal.SharedVolume()  # Doesn't need to be persisted.
-stub = modal.Stub(name=test_app_name, image=test_image)
+# Test-specific Modal objects:
+test_image = image.pip_install(
+    "httpx~=0.23.3"
+)  # extend prod image to include `httpx` for testing.
+# Doesn't need to be persisted, just lives for life of test.
+volume = modal.SharedVolume()
+stub = modal.Stub(name=f"{app_name}-test", image=test_image)
 
 # Register application functions with Modal test stub.
+#
+# uses test-specific url and volume
 web_app_handle = stub.asgi(shared_volumes={CACHE_DIR: volume})(web.get_raw_f())
+# uses test-specific volume
 stub.function(
     secret=modal.Secret.from_name("gmail"),
     shared_volumes={CACHE_DIR: volume},
 )(send_confirmation_email.get_raw_f())
-
+# avoids arity-restriction of Modal cron functions. we need to pass in a test RSS feed URL.
 notify_subscribers_of_new_posts = stub.function(
     secret=modal.Secret.from_name("gmail"),
     shared_volumes={CACHE_DIR: volume},
 )(notify_subscribers_of_new_posts_impl)
-
 
 # The web URL matching regex used by Markdown. ref:
 #   http://daringfireball.net/2010/07/improved_regex_for_matching_urls
@@ -79,6 +84,7 @@ def clear_notifications():
 
 @stub.webhook(method="GET")
 def fake_rss_feed():
+    """Fake RSS feed web endpoint used only during test execution."""
     rfc_822_fmt = "%a, %d %b %Y %H:%M:%S %z"
     now = datetime.now(timezone.utc)
     recent_pub_datetime: str = now.strftime(rfc_822_fmt)
@@ -110,14 +116,14 @@ def fake_rss_feed():
 @stub.function(
     secret=modal.Secret.from_name("gmail"),
 )
-def fetch_recent_emails(n: int = 3) -> list[str]:
+def fetch_recent_emails(n: int = 3) -> list[Message]:
     creds = fetch_fresh_gmail_creds_from_env()
     sender = emailer.GmailSender(creds)
     gmail_service = sender.service
     results = gmail_service.users().messages().list(userId="me", maxResults=n).execute()
-    messages = results.get("messages", [])
-    message_bodies = []
-    for m in messages:
+    gmail_messages = results.get("messages", [])
+    messages = []
+    for m in gmail_messages:
         r = (
             gmail_service.users()
             .messages()
@@ -125,15 +131,15 @@ def fetch_recent_emails(n: int = 3) -> list[str]:
             .execute()
         )
         msg_str = base64.urlsafe_b64decode(r["raw"]).decode("UTF-8")
-        mime_msg = email.message_from_string(str(msg_str))
-        message_bodies.append(mime_msg)
-    return message_bodies
+        messages.append(email.message_from_string(str(msg_str)))
+    return messages
 
 
 @stub.function(
     secret=modal.Secret.from_name("gmail"),
 )
 def trash_email(msg_id: str) -> list[str]:
+    """NOTE: Requires delete scope in Gmail."""
     creds = fetch_fresh_gmail_creds_from_env()
     sender = emailer.GmailSender(creds)
     gmail_service = sender.service
@@ -159,95 +165,90 @@ def test_end_to_end():
 
     # The personal email associated with my Gmail auth.
     test_email_addr = "jonathon.i.belotti@gmail.com"
+    test_web_url = web_app_handle.web_url
 
-    with stub.run():
-        print(stub.registered_functions)
+    # 1. Create a new test DB
+    create_test_db.call()
 
-        test_web_url = web_app_handle.web_url
-        print(test_web_url)
+    # 2. Call /subscribe with email
+    print("Hitting /subscribe endpoint.")
+    httpx.get(f"{test_web_url}/subscribe?email={test_email_addr}")
 
-        assert not pathlib.Path(DB_PATH).exists()
-        # 1. Create a new test DB
-        create_test_db.call()
+    wait_for_email_sending()
 
-        # 2. Call /subscribe with email
-        print("Hitting /subscribe endpoint.")
-        httpx.get(f"{test_web_url}/subscribe?email={test_email_addr}")
+    # 3. Read email from my Gmail and get confirmation link
+    messages = fetch_recent_emails.call()
+    assert len(messages) > 0
+    confirm_url = None
+    confirm_email_id = None
+    for msg in messages:
+        confirm_url = _find_endpoint_url(msg=msg.as_string(), endpoint="confirm")
+        confirm_email_id = msg.get("Message-Id")
+        if confirm_url:
+            break
 
-        wait_for_email_sending()
+    assert confirm_url
+    assert confirm_email_id
 
-        # 3. Read email from my Gmail and get confirmation link
-        messages = fetch_recent_emails.call()
-        assert len(messages) > 0
-        confirm_url = None
-        confirm_email_id = None
-        for msg in messages:
-            confirm_url = _find_endpoint_url(msg=msg.as_string(), endpoint="confirm")
-            confirm_email_id = msg.get("Message-Id")
-            if confirm_url:
-                break
+    # 4. GET the confirmation link to confirm subscription
+    print("Hitting /confirm endpoint.")
+    httpx.get(confirm_url)
 
-        assert confirm_url
-        assert confirm_email_id
+    # 4.2 Delete the confirmation email
+    trash_email.spawn(msg_id=confirm_email_id)
 
-        # 4. GET the confirmation link to confirm subscription
-        print("Hitting /confirm endpoint.")
-        httpx.get(confirm_url)
+    # 5. Use fake RSS to simulate new blog post and run notification cron
+    feed_url = fake_rss_feed.web_url
+    notify_subscribers_of_new_posts.call(feed_url)
 
-        # 4.2 Delete the confirmation email
-        trash_email.spawn(msg_id=confirm_email_id)
+    wait_for_email_sending()
 
-        # 5. Use fake RSS to simulate new blog post and run notification cron
-        feed_url = fake_rss_feed.web_url
-        notify_subscribers_of_new_posts.call(feed_url)
+    # 6. Check email blog update received in my Gmail
+    messages = fetch_recent_emails.call()
+    assert len(messages) > 0
+    unsubscribe_url, new_post_email_date, new_post_email_id = None, None, None
+    for msg in messages:
+        unsubscribe_url = _find_endpoint_url(
+            msg=msg.as_string(), endpoint="unsubscribe"
+        )
+        if unsubscribe_url:
+            assert "Send Me Too Your Subscribers!" in msg.as_string()
+            new_post_email_date = email.utils.parsedate_tz(msg.get("Date"))
+            new_post_email_id = msg.get("Message-Id")
+            break
 
-        wait_for_email_sending()
+    assert all([unsubscribe_url, new_post_email_id, new_post_email_date])
 
-        # 6. Check email blog update received in my Gmail
-        messages = fetch_recent_emails.call()
-        assert len(messages) > 0
-        unsubscribe_url, new_post_email_date, new_post_email_id = None, None, None
-        for msg in messages:
-            unsubscribe_url = _find_endpoint_url(
-                msg=msg.as_string(), endpoint="unsubscribe"
-            )
-            if unsubscribe_url:
-                assert "Send Me Too Your Subscribers!" in msg.as_string()
-                new_post_email_date = email.utils.parsedate_tz(msg.get("Date"))
-                new_post_email_id = msg.get("Message-Id")
-                break
+    # 7. Hit the unsubscribe link from the email
+    print("Hitting /unsubscribe endpoint.")
+    httpx.get(unsubscribe_url)
 
-        assert all([unsubscribe_url, new_post_email_id, new_post_email_date])
+    # 7.2 Delete email
+    trash_email.spawn(msg_id=new_post_email_id)
 
-        # 7. Hit the unsubscribe link from the email
-        print("Hitting /unsubscribe endpoint.")
-        httpx.get(unsubscribe_url)
+    # 8. Use fake RSS again to simulate another post
+    clear_notifications.call()
+    notify_subscribers_of_new_posts.call(feed_url)
 
-        # 7.2 Delete email
-        trash_email.spawn(msg_id=new_post_email_id)
+    wait_for_email_sending()
 
-        # 8. Use fake RSS again to simulate another post
-        clear_notifications.call()
-        notify_subscribers_of_new_posts.call(feed_url)
-
-        wait_for_email_sending()
-
-        # 9. Check no new email was sent after unsubscribing.
-        for msg in messages:
-            unsubscribe_url = _find_endpoint_url(
-                msg=msg.as_string(), endpoint="unsubscribe"
-            )
-            if unsubscribe_url:
-                assert "Send Me Too Your Subscribers!" in msg.as_string()
-                # check its the email sent previously
-                curr_email_date = email.utils.parsedate_tz(msg.get("date"))
-                if new_post_email_date < curr_email_date:
-                    raise AssertionError(
-                        "The unsubscribe/ endpoint seems to have failed to work!"
-                        f"{curr_email_date} is newer than {new_post_email_date}, so "
-                        "another email was sent after unsubcribe/ endpoint was hit."
-                    )
+    # 9. Check no new email was sent after unsubscribing.
+    for msg in messages:
+        unsubscribe_url = _find_endpoint_url(
+            msg=msg.as_string(), endpoint="unsubscribe"
+        )
+        if unsubscribe_url:
+            assert "Send Me Too Your Subscribers!" in msg.as_string()
+            # check its the email sent previously
+            curr_email_date = email.utils.parsedate_tz(msg.get("date"))
+            if new_post_email_date < curr_email_date:
+                raise AssertionError(
+                    "The unsubscribe/ endpoint seems to have failed to work!"
+                    f"{curr_email_date} is newer than {new_post_email_date}, so "
+                    "another email was sent after unsubcribe/ endpoint was hit."
+                )
 
 
 if __name__ == "__main__":
-    raise SystemExit(test_end_to_end())
+    with stub.run():
+        raise SystemExit(test_end_to_end())
