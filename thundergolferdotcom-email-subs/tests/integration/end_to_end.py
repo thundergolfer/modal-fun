@@ -206,24 +206,25 @@ def test_end_to_end():
         # 6. Check email blog update received in my Gmail
         messages = fetch_recent_emails.call()
         assert len(messages) > 0
-        unsubscribe_url = None
-        email_date = None
+        unsubscribe_url, new_post_email_date, new_post_email_id = None, None, None
         for msg in messages:
             unsubscribe_url = _find_endpoint_url(
                 msg=msg.as_string(), endpoint="unsubscribe"
             )
             if unsubscribe_url:
                 assert "Send Me Too Your Subscribers!" in msg.as_string()
-                email_date = email.utils.parsedate_tz(msg.get("Date"))
+                new_post_email_date = email.utils.parsedate_tz(msg.get("Date"))
+                new_post_email_id = msg.get("Message-Id")
                 break
 
-        assert unsubscribe_url
-        assert email_date
+        assert all([unsubscribe_url, new_post_email_id, new_post_email_date])
 
         # 7. Hit the unsubscribe link from the email
         print("Hitting /unsubscribe endpoint.")
-        print(unsubscribe_url)
         httpx.get(unsubscribe_url)
+
+        # 7.2 Delete email
+        trash_email.spawn(msg_id=new_post_email_id)
 
         # 8. Use fake RSS again to simulate another post
         clear_notifications.call()
@@ -231,7 +232,7 @@ def test_end_to_end():
 
         wait_for_email_sending()
 
-        # 9. Check no new email
+        # 9. Check no new email was sent after unsubscribing.
         for msg in messages:
             unsubscribe_url = _find_endpoint_url(
                 msg=msg.as_string(), endpoint="unsubscribe"
@@ -239,7 +240,13 @@ def test_end_to_end():
             if unsubscribe_url:
                 assert "Send Me Too Your Subscribers!" in msg.as_string()
                 # check its the email sent previously
-                assert email_date == email.utils.parsedate_tz(msg.get("date"))
+                curr_email_date = email.utils.parsedate_tz(msg.get("date"))
+                if new_post_email_date < curr_email_date:
+                    raise AssertionError(
+                        "The unsubscribe/ endpoint seems to have failed to work!"
+                        f"{curr_email_date} is newer than {new_post_email_date}, so "
+                        "another email was sent after unsubcribe/ endpoint was hit."
+                    )
 
 
 if __name__ == "__main__":
