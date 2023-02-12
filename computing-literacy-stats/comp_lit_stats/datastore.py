@@ -29,7 +29,7 @@ class Datastore:
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO notification VALUES(?, ?, ?)",
+                "INSERT INTO stat VALUES(?, ?, ?)",
                 (id_, data_str, created_at),
             )
         return StatLine(
