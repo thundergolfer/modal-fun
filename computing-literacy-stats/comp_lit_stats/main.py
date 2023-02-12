@@ -57,6 +57,17 @@ def summarize_stat_lines():
     }
 
 
+@web_app.get("/dump")
+def dump():
+    conn = datastore.get_db(DB_PATH)
+    store = datastore.Datastore(
+        conn=conn,
+        codegen_fn=lambda: str(uuid4()),
+        clock_fn=lambda: datetime.now(timezone.utc),
+    )
+    return store.dump_stat_lines()
+
+
 @stub.asgi(
     # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
     shared_volumes={CACHE_DIR: volume},

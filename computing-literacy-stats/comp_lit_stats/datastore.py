@@ -70,6 +70,5 @@ def init(db) -> None:
             """CREATE TABLE stat(
             id TEXT PRIMARY KEY, 
             data TEXT NOT NULL, 
-            created_at INTEGER,
-        )"""
+            created_at INTEGER)"""
         )
