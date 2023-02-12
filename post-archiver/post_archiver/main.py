@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 
 import modal
+from pydantic import BaseModel
 
 from .config import USER_SETTINGS
 from .datastore import (
@@ -30,6 +31,16 @@ DATABASES = {
         "PORT": "<port>",
     }
 }
+
+
+class Item(BaseModel):
+    text: str
+
+
+@stub.webhook(method="POST", label="infinite-ama")
+def chatbot(item: Item):
+    # TODO: Just returns the question for now; skeleton code for testing frontend.
+    return {"answer": item.text}
 
 
 def db_config_from_env() -> dict[str, str]:
