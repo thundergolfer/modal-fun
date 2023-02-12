@@ -73,4 +73,20 @@ def dump():
     shared_volumes={CACHE_DIR: volume},
 )
 def web():
+    from fastapi.middleware.cors import CORSMiddleware
+
+    web_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://thundergolfer.com",
+            "https://thundergolfer.com",
+            "http://localhost:4000",
+            "http://localhost:4000/",
+            "localhost:4000",
+            "localhost:4000/",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     return web_app
