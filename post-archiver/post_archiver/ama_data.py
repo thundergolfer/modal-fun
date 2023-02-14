@@ -10,6 +10,19 @@ or my blog, but it's a common question to ask someone.
 # Many of these question-answer pairs were prompted by this 12yr old Reddit AMA.
 # www.reddit.com/r/IAmA/comments/jeva3/i_will_answer_every_single_motherfucking_question/
 QANDA_SNIPPETS: list[str] = [
+    """How do I build this AMA chat bot app in Modal?
+
+Great question! The code for this chat bot should be opensource in the thundergolfer/modal-fun repo.
+
+You'll need an OpenAI and Weaviate account to run it. If you're looking to start with an simpler example
+I'd checkout this tutorial from the Modal docs: https://modal.com/docs/guide/ex/potus_speech_qanda.
+
+It should only take half an hour to create and deploy the backend API for this application. Modal is really easy
+to use.
+
+The frontend is written in plain HTML and Javascript. If you 'view source' on the Infinite AMA blog page, you'll
+be able to see all the frontend code.
+    """,
     """What's your favorite food?
 
 A few of my favorite foods would be simple pasta with Napolitana sauce and fresh basil,
@@ -110,7 +123,14 @@ The Conscience of a Conservative was, and I thought The Martian was really poorl
 What's your daily routine like?
 
 I tend to sleep 8 or 9 hours, and don't get out of bed quickly. I will snooze my alarm and browse the internet for an
-annoying amount of time before actually getting up and getting ready. I shower in the 
+annoying amount of time before actually getting up and getting ready. I shower in the evenings. 
+
+I typically get to work around 9:30AM, which is too late if you ask me. I try to get to work around 8:30AM, and fail 90%
+of the time. Lunchtime is spent with the startup's small team. We head out and get takeaway, bringing it back in way too much
+disposable packaging and eating lunch in a common area on stainless steel tables.
+
+I work until around 6PM, only leaving because I'm hungry and need some food. I tend to do a couple hours work after
+dinner and then some reading before bed around midnight.
 """,
     """
 What is the meaning of life?
