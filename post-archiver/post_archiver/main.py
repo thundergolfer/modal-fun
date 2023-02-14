@@ -1,9 +1,12 @@
+import os
 import time
 from datetime import datetime
 
 import modal
 from pydantic import BaseModel
 
+from .ama_data import QANDA_SNIPPETS
+from .chatbot import get_new_chain1
 from .config import USER_SETTINGS
 from .datastore import (
     bulk_insert,
@@ -13,9 +16,17 @@ from .datastore import (
     HnComment,
     PostType,
 )
+from .ingest import ingest_data
 
 image = modal.Image.debian_slim().pip_install(
-    "httpx", "loguru", "psycopg2-binary", "sqlalchemy"
+    "httpx",
+    "langchain~=0.0.85",
+    "loguru",
+    "openai~=0.26.5",
+    "psycopg2-binary",
+    "sqlalchemy",
+    "tiktoken~=0.2.0",
+    "weaviate-client~=3.11.0",
 )
 stub = modal.Stub(
     name="post-archiver", image=image, secrets=[modal.Secret.from_name("neondb")]
@@ -35,12 +46,45 @@ DATABASES = {
 
 class Item(BaseModel):
     text: str
+    # list[(human, ai)]
+    history: list[tuple[str, str]] = []
 
 
-@stub.webhook(method="POST", label="infinite-ama")
+@stub.webhook(
+    method="POST",
+    label="infinite-ama",
+    secrets=[
+        modal.Secret.from_name("openai-secret"),
+        modal.Secret.from_name("weaviate"),
+    ],
+)
 def chatbot(item: Item):
-    # TODO: Just returns the question for now; skeleton code for testing frontend.
-    return {"answer": item.text}
+    import weaviate
+    from langchain.vectorstores import Weaviate
+
+    client = weaviate.Client(
+        url=os.environ["WEAVIATE_URL"],
+        additional_headers={"X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]},
+    )
+    vectorstore = Weaviate(client, "Paragraph", "content", attributes=["source"])
+    chain = get_new_chain1(vectorstore)
+    result = chain({"question": item.text, "chat_history": item.history})
+    return {"answer": result["answer"]}
+
+
+@stub.function(
+    secrets=[
+        modal.Secret.from_name("openai-secret"),
+        modal.Secret.from_name("weaviate"),
+    ]
+)
+def ingest():
+    ingest_data(
+        weaviate_url=os.environ["WEAVIATE_URL"],
+        openai_api_key=os.environ["OPENAI_API_KEY"],
+        docs=QANDA_SNIPPETS,
+    )
+    print("Done!")
 
 
 def db_config_from_env() -> dict[str, str]:
