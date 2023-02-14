@@ -17,6 +17,7 @@ from .datastore import (
     PostType,
 )
 from .ingest import ingest_data
+from .ingest_examples import ingest_ex
 
 image = modal.Image.debian_slim().pip_install(
     "httpx",
@@ -47,7 +48,7 @@ DATABASES = {
 class Item(BaseModel):
     text: str
     # list[(human, ai)]
-    history: list[tuple[str, str]] = []
+    history: list[list[str]] = []
 
 
 @stub.webhook(
@@ -83,6 +84,10 @@ def ingest():
         weaviate_url=os.environ["WEAVIATE_URL"],
         openai_api_key=os.environ["OPENAI_API_KEY"],
         docs=QANDA_SNIPPETS,
+    )
+    ingest_ex(
+        weaviate_url=os.environ["WEAVIATE_URL"],
+        openai_api_key=os.environ["OPENAI_API_KEY"],
     )
     print("Done!")
 

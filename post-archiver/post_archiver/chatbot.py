@@ -3,10 +3,8 @@ Provides chatbot and question-answering functionality over API
 using my archived internet posts as the data source.
 """
 
-import json
 import os
-import pathlib
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
 def get_new_chain1(vectorstore):
