@@ -28,17 +28,16 @@ The application currently supports collecting posts from the following sources:
 ## How-to setup
 
 1. Create a [Modal.com](https://modal.com) account, if you don't already have one.
-2. Fill in the required config values at XXX
-3. Create a `modal.Secret` for YYY
+2. Fill in the required config values in `config.py`
+3. Create `modal.Secret`s for OpenAI API Key and Weaviate cluster URL.
 4. Create a `virtualenv` and install locally-required packages with `pip install -r requirements.txt`.
-
-todo
+5. Provide chatbot bootstrapping in `ama_data.py`, or optionally write code to download some and format it.
 
 ## Development
 
 ### Running
 
-```
+```bash
 modal run infinite_ama.main
 ```
 
@@ -48,6 +47,6 @@ todo
 
 ### Deployment
 
-```
+```bash
 modal deploy infinite_ama.main
 ```
