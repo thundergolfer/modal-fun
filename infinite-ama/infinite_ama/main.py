@@ -6,7 +6,7 @@ import modal
 from pydantic import BaseModel
 
 from .ama_data import QANDA_SNIPPETS
-from .chatbot import get_new_chain1
+from .chatbot import create_chatbot_langchain
 from .config import USER_SETTINGS
 from .datastore import (
     bulk_insert,
@@ -60,7 +60,7 @@ def chatbot(request: ChatResponseRequest):
         additional_headers={"X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]},
     )
     vectorstore = Weaviate(client, "Paragraph", "content", attributes=["source"])
-    chain = get_new_chain1(vectorstore)
+    chain = create_chatbot_langchain(vectorstore)
     result = chain({"question": request.text, "chat_history": request.history})
     return {"answer": result["answer"]}
 

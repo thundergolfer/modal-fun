@@ -9,7 +9,7 @@ from typing import Dict, List
 from .config import USER_SETTINGS
 
 
-def get_new_chain1(vectorstore):
+def create_chatbot_langchain(vectorstore):
     import weaviate
     from langchain import OpenAI, PromptTemplate
     from langchain.chains import LLMChain
@@ -39,7 +39,7 @@ def get_new_chain1(vectorstore):
 
         def _call(self, inputs: Dict[str, str]) -> Dict[str, str]:
             question = inputs["question"]
-            chat_history_str = _get_chat_history(inputs["chat_history"])
+            chat_history_str = _fmt_chat_history(inputs["chat_history"])
             if chat_history_str:
                 new_question = self.key_word_extractor.run(
                     question=question, chat_history=chat_history_str
@@ -122,7 +122,7 @@ Answer in Markdown:"""
     )
 
 
-def _get_chat_history(chat_history: list[tuple[str, str]]):
+def _fmt_chat_history(chat_history: list[tuple[str, str]]) -> str:
     buffer = ""
     for human_s, ai_s in chat_history:
         human = f"Human: " + human_s
