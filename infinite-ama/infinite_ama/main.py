@@ -16,8 +16,7 @@ from .datastore import (
     HnComment,
     PostType,
 )
-from .ingest import ingest_data
-from .ingest_examples import ingest_ex
+from .ingest import ingest_data, ingest_examples
 
 image = modal.Image.debian_slim().pip_install(
     "httpx",
@@ -31,7 +30,7 @@ image = modal.Image.debian_slim().pip_install(
 )
 stub = modal.Stub(
     name="infinite-ama", image=image, secrets=[modal.Secret.from_name("neondb")]
-)g
+)
 
 DATABASES = {
     "default": {
@@ -80,12 +79,16 @@ def chatbot(item: Item):
     ]
 )
 def ingest():
+    """
+    Run this ad-hoc with `modal run`. It will setup the chat bot's
+    knowledge base data.
+    """
     ingest_data(
         weaviate_url=os.environ["WEAVIATE_URL"],
         openai_api_key=os.environ["OPENAI_API_KEY"],
         docs=QANDA_SNIPPETS,
     )
-    ingest_ex(
+    ingest_examples(
         weaviate_url=os.environ["WEAVIATE_URL"],
         openai_api_key=os.environ["OPENAI_API_KEY"],
     )

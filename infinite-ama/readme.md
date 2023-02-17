@@ -30,6 +30,7 @@ The application currently supports collecting posts from the following sources:
 1. Create a [Modal.com](https://modal.com) account, if you don't already have one.
 2. Fill in the required config values at XXX
 3. Create a `modal.Secret` for YYY
+4. Create a `virtualenv` and install locally-required packages with `pip install -r requirements.txt`.
 
 todo
 

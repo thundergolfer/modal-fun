@@ -6,6 +6,8 @@ using my archived internet posts as the data source.
 import os
 from typing import Dict, List
 
+from .config import USER_SETTINGS
+
 
 def get_new_chain1(vectorstore):
     import weaviate
@@ -97,15 +99,15 @@ def get_new_chain1(vectorstore):
         template=">Example:\nContent:\n---------\n{page_content}\n----------\nSource: {source}",
         input_variables=["page_content", "source"],
     )
-    template = """You are an AI assistant for a software engineer named Jonathon. His blog is https://thundergolfer.com.
+    template = f"""You are an AI assistant for a software engineer named {USER_SETTINGS.user_name}. Their blog is {USER_SETTINGS.chatbot_homepage}.
 You are given the following extracted parts of a long document and a question. Provide a conversational answer to the question.
 You should only use hyperlinks that are explicitly listed as a source in the context. Do NOT make up a hyperlink that is not listed.
 If the question includes a request for code, provide a code block directly from the documentation.
 If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
-If the question is not about Jonathon, politely inform them that you are tuned to only answer questions about Jonathon.
-Question: {question}
+If the question is not about {USER_SETTINGS.user_name}, politely inform them that you are tuned to only answer questions about {USER_SETTINGS.user_name}.
+Question: {{question}}
 =========
-{context}
+{{context}}
 =========
 Answer in Markdown:"""
     PROMPT = PromptTemplate(template=template, input_variables=["question", "context"])
