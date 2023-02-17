@@ -32,21 +32,10 @@ stub = modal.Stub(
     name="infinite-ama", image=image, secrets=[modal.Secret.from_name("neondb")]
 )
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "<dbname>",
-        "USER": "<user>",
-        "PASSWORD": "<password>",
-        "HOST": "<endpoint_hostname>",
-        "PORT": "<port>",
-    }
-}
 
-
-class Item(BaseModel):
+class ChatResponseRequest(BaseModel):
     text: str
-    # list[(human, ai)]
+    # type structure: list[(human, ai)]
     history: list[list[str]] = []
 
 
@@ -58,7 +47,11 @@ class Item(BaseModel):
         modal.Secret.from_name("weaviate"),
     ],
 )
-def chatbot(item: Item):
+def chatbot(request: ChatResponseRequest):
+    """
+    The entire chatbot API, a single HTTP POST endpoint. The state of the conversation
+    is maintained client-side, and is passed to the endpoint on each inference request.
+    """
     import weaviate
     from langchain.vectorstores import Weaviate
 
@@ -68,7 +61,7 @@ def chatbot(item: Item):
     )
     vectorstore = Weaviate(client, "Paragraph", "content", attributes=["source"])
     chain = get_new_chain1(vectorstore)
-    result = chain({"question": item.text, "chat_history": item.history})
+    result = chain({"question": request.text, "chat_history": request.history})
     return {"answer": result["answer"]}
 
 

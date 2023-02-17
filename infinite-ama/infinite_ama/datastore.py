@@ -7,6 +7,7 @@ from .crockfords32 import generate
 
 Base = declarative_base()
 
+
 class PostType(enum.Enum):
     HN = "hn"
     REDDIT = "re"
