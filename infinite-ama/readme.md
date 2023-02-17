@@ -2,17 +2,17 @@
   <img src="https://user-images.githubusercontent.com/12058921/212502958-771f18f3-750f-4b56-8e40-37088cf2696c.png"/>
 </p>
 
-<h1 align="center">Post Archiver</h1>
+<h1 align="center">Infinite Ask-me-Anything</h1>
 
-> Periodically archive blog posts and internet comments, and use them to train a chat-bot.
+> Periodically archive blog posts and internet comments, and use them to train a GPT chat-bot.
 
----
-
-🚧 Coming soon!
+![web user interface for Infinite AMA app](./hero-infinite-ama.png)
 
 ---
 
-This Modal application makes it easy to continuously backup your online posts to a database.
+> 🚧 Work In Progress
+
+The **post archiver** part of the Modal application makes it easy to continuously backup your online posts to a database.
 With this backup you can do fun things:
 
 - Full-text search, and text analytics
@@ -38,7 +38,7 @@ todo
 ### Running
 
 ```
-modal run post_archiver.main
+modal run infinite_ama.main
 ```
 
 ### Testing
@@ -47,4 +47,6 @@ todo
 
 ### Deployment
 
-todo
+```
+modal deploy infinite_ama.main
+```

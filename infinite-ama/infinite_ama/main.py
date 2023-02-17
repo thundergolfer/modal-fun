@@ -30,8 +30,8 @@ image = modal.Image.debian_slim().pip_install(
     "weaviate-client~=3.11.0",
 )
 stub = modal.Stub(
-    name="post-archiver", image=image, secrets=[modal.Secret.from_name("neondb")]
-)
+    name="infinite-ama", image=image, secrets=[modal.Secret.from_name("neondb")]
+)g
 
 DATABASES = {
     "default": {
