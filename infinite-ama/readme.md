@@ -35,6 +35,10 @@ The application currently supports collecting posts from the following sources:
 
 ## Development
 
+### Frontend
+
+The web interface code for this app lives in the [thundergolfer/thundergolfer.github.io repo](https://github.com/thundergolfer/thundergolfer.github.io/blob/main/collections/_posts/2023-02-10-infinite-ama.md).
+
 ### Running
 
 ```bash
