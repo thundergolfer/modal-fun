@@ -1,0 +1,1 @@
+sqlalchemy~=2.0.4  # Required locally to evaluate SQLalchemy models on module load.
