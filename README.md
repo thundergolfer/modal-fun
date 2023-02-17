@@ -5,6 +5,7 @@
 - [**big-data-csv**](/big-data-csv/) - How big is big these days? Using Modal and Dask to download and process ~100GB of CSV data in ~80 seconds.
 - [**datasette-afl**](/datasette-afl/) - Building a simple way to run SQL queries against [🏉 AFL Football](https://www.youtube.com/watch?v=ODZIc7UYtW4&t=16s) data. [👷‍♂️ WIP]
 - [**datasette-serverless**](/datasette-serverless/) - Original implementation of [modal.com/docs/guide/ex/covid_datasette](https://modal.com/docs/guide/ex/covid_datasette)
+- [**infinite-ama**](/infinite-ama/) - Periodically fetch my own internet posts to run a personalized GPT question-answered chatbot. [👷‍♂️ WIP/MVP]
 - [**thundergolferdotcom-dash**](/thundergolferdotcom-dash/) - A Modal webhook that powers [thundergolfer.com/about#dashboard](https://thundergolfer.com/about#dashboard)
 - [**thundergolferdotcom-email-subs**](/thundergolferdotcom-email-subs/) - A GMail API and Modal-powered app that offers email newsletter functionality 📫.
 
