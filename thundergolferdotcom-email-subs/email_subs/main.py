@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from . import datastore
@@ -30,7 +29,7 @@ SCOPES = [
 
 modal_workspace_username = "thundergolfer"
 app_name = "thundergolferdotcom-email-subs"
-volume = modal.SharedVolume().persist(f"{app_name}-vol")
+nfs = modal.NetworkFileSystem.persisted(f"{app_name}-vol")
 image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
 )
@@ -58,9 +57,6 @@ class Config(NamedTuple):
     # This is used as the FROM address in sent mail, and is associated with
     # the authenticated GMail session.
     maintainer_gmail_address: str
-    # The URL of the deployed Modal webhook. This URL is included in hyperlinks
-    # inserted into subscriber emails.
-    # endpoint_url: str
     # URL for blog's RSS feed
     rss_feed_url: str
     # Used in setup and testing. Can be the same as the maintainer email address.
@@ -80,8 +76,6 @@ config = Config(
     maintainer_gmail_address="jonathon.i.belotti@gmail.com",
     rss_feed_url="https://thundergolfer.com/feed.xml",
     test_email_address="jonathon.bel.melbourne@gmail.com",
-    # TODO: Avoid hardcoding the deployment URL in config. Lookup at runtime?
-    # endpoint_url=f"https://{modal_workspace_username}--{app_name}-web.modal.run",
     twitter_username="jonobelotti_IO",
 )
 
@@ -118,7 +112,7 @@ def fetch_blog_posts_from_rss(feed_url: str) -> list[BlogEntry]:
     ]
 
 
-@stub.function(shared_volumes={CACHE_DIR: volume})
+@stub.function(network_file_systems={CACHE_DIR: nfs})
 def setup_db():
     """
     Only need to run this once for a Modal app.
@@ -130,7 +124,7 @@ def setup_db():
     print("☑️ DB setup done")
 
 
-@stub.function(shared_volumes={CACHE_DIR: volume})
+@stub.function(network_file_systems={CACHE_DIR: nfs})
 def reset_db(notifications=False, subs=False):
     """
     ⚠️ Only use during testing. Don't reset production DB as it could cause
@@ -233,7 +227,7 @@ def notify_subscribers_of_new_posts_impl(feed_url):
     # Check relatively frequently for new posts, because subscribers should
     # be among first to hear of a new post.
     schedule=modal.Period(hours=3),
-    shared_volumes={CACHE_DIR: volume},
+    network_file_systems={CACHE_DIR: nfs},
     secret=modal.Secret.from_name("gmail"),
 )
 def notify_subscribers_of_new_posts():
@@ -246,7 +240,7 @@ def notify_subscribers_of_new_posts():
 
 @stub.function(
     secret=modal.Secret.from_name("gmail"),
-    shared_volumes={CACHE_DIR: volume},
+    network_file_systems={CACHE_DIR: nfs},
 )
 def send_confirmation_email(email: str):
     creds = Credentials.from_authorized_user_info(
@@ -357,10 +351,11 @@ def subscribe(email: str):
     return {"message": f"Confirmation email sent to '{email}'"}
 
 
-@stub.asgi(
+@stub.function(
     # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
-    shared_volumes={CACHE_DIR: volume},
+    network_file_systems={CACHE_DIR: nfs},
 )
+@modal.asgi_app()
 def web():
     web_app.add_middleware(
         CORSMiddleware,

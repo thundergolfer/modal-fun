@@ -11,8 +11,11 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 
-stub = modal.Stub(name="thundergolferdotcom-about-page")
-stub.cache = modal.Dict()
+stub = modal.Stub(
+    name="thundergolferdotcom-about-page",
+    secrets=[modal.Secret.from_name("spotify-aboutme")],
+)
+stub.cache = modal.Dict.new()
 bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
 
 web_app = FastAPI()
@@ -118,7 +121,7 @@ def manual_spotify_auth():
         f"Visit {authorize_url} and then paste back the resulting code in the URL.\nCode: "
     ).strip()
     with stub.run():
-        refresh_token = create_spotify_refresh_token.call(code)
+        refresh_token = create_spotify_refresh_token.remote(code)
     print(f"SPOTIFY_REFRESH_TOKEN: {refresh_token}")
     print(
         "Save the refresh_token back into the `spotify-aboutme` secret in Modal as SPOTIFY_REFRESH_TOKEN"
@@ -219,14 +222,12 @@ def request_goodreads_reads(max_books=3) -> list[Book]:
     return books
 
 
-@stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
+@stub.function()
 def about_me():
-    from modal import container_app
-
     # Cache the retrieved data for 10x faster endpoint performance.
     now = int(time.time())
     try:
-        (store_time, response) = container_app.cache["response"]
+        (store_time, response) = stub.cache["response"]
         if now - store_time <= CACHE_TIME_SECS:
             return response
     except KeyError:
@@ -234,7 +235,7 @@ def about_me():
 
     stats = AboutMeStats(
         spotify=request_spotify_top_tracks(),
-        goodreads=request_goodreads_reads.call(),
+        goodreads=request_goodreads_reads.remote(),
         # TODO: Actually populate this data.
         twitter=TwitterInfo(
             display_name="Jonathon Belotti",
@@ -251,17 +252,18 @@ def about_me():
         ),
     )
     response = dataclasses.asdict(stats)
-    container_app.cache["response"] = (now, response)
+    stub.cache["response"] = (now, response)
     return response
 
 
 @web_app.get("/")
 def hook(response: Response):
     response.headers["Cache-Control"] = f"max-age={CACHE_TIME_SECS}"
-    return about_me.call()
+    return about_me.local()
 
 
-@stub.asgi
+@stub.function()
+@modal.asgi_app()
 def web():
     web_app.add_middleware(
         CORSMiddleware,
@@ -289,4 +291,4 @@ if __name__ == "__main__":
 
     # (manually test fn without going through webhook)
     # with stub.run():
-    #     print(about_me.call())
+    #     print(about_me.remote())

@@ -39,13 +39,15 @@ class ChatResponseRequest(BaseModel):
     history: list[list[str]] = []
 
 
-@stub.webhook(
-    method="POST",
-    label="infinite-ama",
+@stub.function(
     secrets=[
         modal.Secret.from_name("openai-secret"),
         modal.Secret.from_name("weaviate"),
     ],
+)
+@modal.web_endpoint(
+    method="POST",
+    label="infinite-ama"
 )
 def chatbot(request: ChatResponseRequest):
     """

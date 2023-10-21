@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime
-from typing import Callable, NamedTuple, Optional
+from typing import Callable, NamedTuple
 
 
 class Subscriber(NamedTuple):
