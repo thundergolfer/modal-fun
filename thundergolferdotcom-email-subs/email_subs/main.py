@@ -235,7 +235,7 @@ def notify_subscribers_of_new_posts():
     Cronjob function that checks for new blog posts and if a new one is found
     sends email notifications to all confirmed subscribers.
     """
-    notify_subscribers_of_new_posts_impl(config.feed_url)
+    notify_subscribers_of_new_posts_impl(config.rss_feed_url)
 
 
 @stub.function(
