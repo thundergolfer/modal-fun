@@ -29,11 +29,11 @@ SCOPES = [
 
 modal_workspace_username = "thundergolfer"
 app_name = "thundergolferdotcom-email-subs"
-nfs = modal.NetworkFileSystem.persisted(f"{app_name}-vol")
+nfs = modal.NetworkFileSystem.from_name(f"{app_name}-vol", create_if_missing=True)
 image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
 )
-stub = modal.Stub(name=app_name, image=image)
+app = modal.App(name=app_name, image=image)
 web_app = FastAPI()
 
 
@@ -112,7 +112,7 @@ def fetch_blog_posts_from_rss(feed_url: str) -> list[BlogEntry]:
     ]
 
 
-@stub.function(network_file_systems={CACHE_DIR: nfs})
+@app.function(network_file_systems={CACHE_DIR: nfs})
 def setup_db():
     """
     Only need to run this once for a Modal app.
@@ -124,7 +124,7 @@ def setup_db():
     print("☑️ DB setup done")
 
 
-@stub.function(network_file_systems={CACHE_DIR: nfs})
+@app.function(network_file_systems={CACHE_DIR: nfs})
 def reset_db(notifications=False, subs=False):
     """
     ⚠️ Only use during testing. Don't reset production DB as it could cause
@@ -223,12 +223,12 @@ def notify_subscribers_of_new_posts_impl(feed_url):
     print("✅ Done!")
 
 
-@stub.function(
+@app.function(
     # Check relatively frequently for new posts, because subscribers should
     # be among first to hear of a new post.
     schedule=modal.Period(hours=3),
     network_file_systems={CACHE_DIR: nfs},
-    secret=modal.Secret.from_name("gmail"),
+    secrets=[modal.Secret.from_name("gmail")],
 )
 def notify_subscribers_of_new_posts():
     """
@@ -238,8 +238,8 @@ def notify_subscribers_of_new_posts():
     notify_subscribers_of_new_posts_impl(config.rss_feed_url)
 
 
-@stub.function(
-    secret=modal.Secret.from_name("gmail"),
+@app.function(
+    secrets=[modal.Secret.from_name("gmail")],
     network_file_systems={CACHE_DIR: nfs},
 )
 def send_confirmation_email(email: str):
@@ -351,7 +351,7 @@ def subscribe(email: str):
     return {"message": f"Confirmation email sent to '{email}'"}
 
 
-@stub.function(
+@app.function(
     # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
     network_file_systems={CACHE_DIR: nfs},
 )
@@ -414,10 +414,10 @@ def create_refresh_token_and_test_creds():
 
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "create-refresh-token":
-        with stub.run():
+        with app.run():
             create_refresh_token_and_test_creds()
     elif len(sys.argv) == 0:
-        stub.serve()
+        app.serve()
     else:
         print(
             "usage: python3 -m email_subs.main [create-refresh-token]", file=sys.stderr

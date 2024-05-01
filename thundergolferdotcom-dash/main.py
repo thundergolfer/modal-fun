@@ -82,7 +82,7 @@ class AboutMeStats:
 SPOTIFY_CLIENT_ID = "a38982a07d3c4071967f35b5e84ef599"
 
 
-@stub.function(secret=modal.Secret.from_name("spotify-aboutme"))
+@stub.function(secrets=[modal.Secret.from_name("spotify-aboutme")])
 def create_spotify_refresh_token(code: str):
     auth_str = (
         os.environ["SPOTIFY_CLIENT_ID"] + ":" + os.environ["SPOTIFY_CLIENT_SECRET"]
