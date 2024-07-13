@@ -5,15 +5,15 @@ from uuid import uuid4
 import modal
 from fastapi import FastAPI
 
-from . import datastore
+import datastore
 
 CACHE_DIR = "/cache"
 DB_PATH = CACHE_DIR + "/comp_lit_stats.db"
 
 modal_workspace_username = "thundergolfer"
 app_name = "comp-lit-stats"
-volume = modal.NetworkFileSystem.persisted(f"{app_name}-vol")
-stub = modal.Stub(name=app_name)
+volume = modal.NetworkFileSystem.from_name(f"{app_name}-vol", create_if_missing=True)
+app = modal.App(name=app_name)
 
 web_app = FastAPI()
 
@@ -24,7 +24,7 @@ class AddStatLineRequest(BaseModel):
     trash: list[str]
 
 
-@stub.function(network_file_systems={CACHE_DIR: volume})
+@app.function(network_file_systems={CACHE_DIR: volume})
 def setup_db():
     """
     Only need to run this once for a Modal app.
@@ -68,7 +68,7 @@ def dump():
     return store.dump_stat_lines()
 
 
-@stub.function(
+@app.function(
     # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
     network_file_systems={CACHE_DIR: volume},
 )
