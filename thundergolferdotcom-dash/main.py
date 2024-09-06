@@ -262,7 +262,7 @@ def hook(response: Response):
     return about_me.local()
 
 
-@app.function()
+@app.function(cloud="oci", enable_memory_snapshot=True)
 @modal.asgi_app()
 def web():
     web_app.add_middleware(
