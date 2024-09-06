@@ -10,13 +10,13 @@ import modal
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-
-stub = modal.Stub(
+bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
+app = modal.App(
     name="thundergolferdotcom-about-page",
     secrets=[modal.Secret.from_name("spotify-aboutme")],
+    image=bs4_image,
 )
-stub.cache = modal.Dict.new()
-bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
+cache = modal.Dict.from_name("thundergolferdotcom-about-page-cache", create_if_missing=True)
 
 web_app = FastAPI()
 
@@ -82,7 +82,7 @@ class AboutMeStats:
 SPOTIFY_CLIENT_ID = "a38982a07d3c4071967f35b5e84ef599"
 
 
-@stub.function(secrets=[modal.Secret.from_name("spotify-aboutme")])
+@app.function(secrets=[modal.Secret.from_name("spotify-aboutme")])
 def create_spotify_refresh_token(code: str):
     auth_str = (
         os.environ["SPOTIFY_CLIENT_ID"] + ":" + os.environ["SPOTIFY_CLIENT_SECRET"]
@@ -120,7 +120,7 @@ def manual_spotify_auth():
     code = input(
         f"Visit {authorize_url} and then paste back the resulting code in the URL.\nCode: "
     ).strip()
-    with stub.run():
+    with app.run():
         refresh_token = create_spotify_refresh_token.remote(code)
     print(f"SPOTIFY_REFRESH_TOKEN: {refresh_token}")
     print(
@@ -172,7 +172,7 @@ def request_spotify_top_tracks(max_tracks=5) -> list[SpotifyTrack]:
     return top_tracks
 
 
-@stub.function(image=bs4_image)
+@app.function()
 def request_goodreads_reads(max_books=3) -> list[Book]:
     """
     Setting @stub.function(interactive=True, ...) was really helpful in writing this function.
@@ -222,12 +222,12 @@ def request_goodreads_reads(max_books=3) -> list[Book]:
     return books
 
 
-@stub.function()
+@app.function()
 def about_me():
     # Cache the retrieved data for 10x faster endpoint performance.
     now = int(time.time())
     try:
-        (store_time, response) = stub.cache["response"]
+        (store_time, response) = cache["response"]
         if now - store_time <= CACHE_TIME_SECS:
             return response
     except KeyError:
@@ -235,7 +235,7 @@ def about_me():
 
     stats = AboutMeStats(
         spotify=request_spotify_top_tracks(),
-        goodreads=request_goodreads_reads.remote(),
+        goodreads=request_goodreads_reads.local(),
         # TODO: Actually populate this data.
         twitter=TwitterInfo(
             display_name="Jonathon Belotti",
@@ -252,7 +252,7 @@ def about_me():
         ),
     )
     response = dataclasses.asdict(stats)
-    stub.cache["response"] = (now, response)
+    cache["response"] = (now, response)
     return response
 
 
@@ -262,7 +262,7 @@ def hook(response: Response):
     return about_me.local()
 
 
-@stub.function()
+@app.function()
 @modal.asgi_app()
 def web():
     web_app.add_middleware(
@@ -287,8 +287,8 @@ if __name__ == "__main__":
     # Uncomment when needing to setup Spotify app auth for 1st time.
     # manual_spotify_auth()
 
-    stub.serve()
+    app.serve()
 
     # (manually test fn without going through webhook)
-    # with stub.run():
+    # with app.run():
     #     print(about_me.remote())
