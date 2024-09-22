@@ -17,7 +17,7 @@ tag = f"{cuda_version}-{flavor}-{os_}"
 
 image = (
     modal.Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.11")
-    .apt_install("git", "wget")
+    .apt_install("git", "wget", "curl")
     .run_commands(
         "wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb",
         "dpkg -i cuda-keyring_1.1-1_all.deb",
@@ -39,7 +39,6 @@ image = (
         "test -f /llm.c/train_gpt2cu",
         gpu="any",
     )
-    .apt_install("curl")
 )
 app = modal.App(
     image=image
@@ -68,6 +67,7 @@ def train_gpt2(
     steps: int = 32000
 ):
     subprocess.run(["nvidia-smi"], check=True)
+
     print("and train! (wait 24 hours here)")
     args = [
         "./train_gpt2cu",
