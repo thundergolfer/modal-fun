@@ -10,15 +10,11 @@ app = modal.App("lets-build-gpt")
 DEPS = ["jupyter", "torch"]
 image = (
     modal.Image.debian_slim()
-    .pip_install("uv==0.2.26") # use uv because it's faster than pip!
+    .pip_install("uv==0.2.26")  # use uv because it's faster than pip!
     .run_commands(f"uv pip install --system --compile {' '.join(DEPS)}")
 )
-app = modal.App(
-    image=image
-)
-volume = modal.Volume.from_name(
-    "lets-build-gpt", create_if_missing=True
-)
+app = modal.App(image=image)
+volume = modal.Volume.from_name("lets-build-gpt", create_if_missing=True)
 
 CACHE_DIR = pathlib.Path("/root/cache")
 JUPYTER_TOKEN = "friendlyjordies"  # Change me to something non-guessable!
@@ -32,7 +28,7 @@ def seed_volume():
 
     output_file = pathlib.Path(CACHE_DIR, "tinyshakespeare.txt")
     url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-    
+
     if not output_file.exists():
         urllib.request.urlretrieve(url, output_file)
         print(f"Downloaded Shakespeare text to {output_file}")
@@ -53,7 +49,6 @@ def seed_volume():
     timeout=SESSION_TIMEOUT,
 )
 def run_jupyter(timeout: int, local_data: dict[str, bytes]):
-
     for path, data in local_data.items():
         pathlib.Path(path).write_bytes(data)
 
@@ -92,21 +87,16 @@ if __name__ == "__main__":
         seed_volume.remote()
         # Pass our local notebook state to the remote container.
         # It will sync this with the notebook file in the Volume.
-        sync_local_to_remote = {
-            CACHE_DIR / "gpt-dev.ipynb": GPT_DEV_NB.read_bytes()
-        }
+        sync_local_to_remote = {CACHE_DIR / "gpt-dev.ipynb": GPT_DEV_NB.read_bytes()}
         # Run the Jupyter Notebook server
         run_jupyter.remote(timeout=SESSION_TIMEOUT, local_data=sync_local_to_remote)
 
     # Grab back any changes we made to the notebook in the remote container.
     # These changes will have been saved into the modal.Volume.
-    remote_to_local = {
-        "gpt-dev.ipynb": GPT_DEV_NB
-    }
+    remote_to_local = {"gpt-dev.ipynb": GPT_DEV_NB}
     for vol_path, local_path in remote_to_local.items():
         data = b""
         for chunk in volume.read_file(vol_path):
             data += chunk
         local_path.write_bytes(data)
         print(f"Updated {local_path}")
-    
