@@ -30,11 +30,14 @@ image = (
     )
     .run_commands(
         "git clone --depth 1 https://github.com/thundergolfer/llm.c",
-        "cd llm.c && git checkout a5025132",
+        "cd llm.c && git checkout 38dd4dbe",
         # download the "starter pack" (~1GB download)
         # contains GPT2-124M weights (used in tests), tokenizer, eval data .bin s
         "cd llm.c && ./dev/download_starter_pack.sh",
-        "cd llm.c && make train_gpt2cu USE_CUDNN=1",
+        # We set NO_USE_MPI=1 to disable MPI because we use the TCP as the nccl_init_method (-pi)
+        # TODO(Jonathon): disabling MPI should not be necessary but `multi_gpu_config_free` in zero.cu
+        # does not check that the init_method == 'mpi' and thus incorrectly calls MPI_Finalize().
+        "cd llm.c && make train_gpt2cu USE_CUDNN=1 NO_USE_MPI=1",
         # Make is not handling errors by exiting with a non-zero code.
         # Ensure the above succeeded by enforcing existance of /llm.c/train_gpt2cu
         "test -f /llm.c/train_gpt2cu",
@@ -165,20 +168,27 @@ def train_gpt2(
 @app.function(
     gpu=GPU,
     timeout=60 * 60,
+    cloud="gcp",
+    volumes={
+        DATA_MOUNT_PATH: data_volume,
+        OUT_MOUNT_PATH: out_volume,
+    },
+    _experimental_scheduler_placement=modal.scheduler_placement.SchedulerPlacement(zone="us-east4-a")
 )
 @modal.experimental.grouped(size=2)
 def run_train_node(
     # 32k steps takes 24 hours on 8xH100
     steps: int = 32000,
 ):
-    subprocess.run(["nvidia-smi"], check=True)
+    # subprocess.run(["nvidia-smi"], check=True)
 
     world_size = int(os.environ.get("MODAL_WORLD_SIZE", 1))
     container_rank = os.environ["MODAL_CONTAINER_RANK"]
     main_addr = os.environ["MODAL_MAIN_I6PN"]
     nccl_ifname = os.environ["NCCL_SOCKET_IFNAME"]
+    cloud = os.environ["MODAL_CLOUD_PROVIDER"]
     print(
-        f"world_size: {world_size}, container_rank: {container_rank}, main_addr: {main_addr}, nccl_ifname: {nccl_ifname}"
+        f"world_size: {world_size}, container_rank: {container_rank}, main_addr: {main_addr}, nccl_ifname: {nccl_ifname}, cloud: {cloud}"
     )
 
     print("and train! (wait 24 hours here)")
@@ -206,7 +216,7 @@ def run_train_node(
         "1",
         # -b 16 sets the micro-batch size to 16 . If you are running out of memory, decrease this value, e.g. try 8, 4, 2, all the way down to 1 potentially.
         "-b",
-        "16",
+        "4",
         # -t 1024 sets the maximum sequence length to 1024, as GPT-2 did
         "-t",
         "1024",
@@ -258,6 +268,10 @@ def run_train_node(
             "tcp",
             "-ps",
             main_addr,
+            "-pg",
+            str(GPU_COUNT),
+            "-pn",
+            str(world_size),
         ]
     else:
         multi_node_args = []
