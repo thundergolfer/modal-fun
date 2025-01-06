@@ -228,11 +228,14 @@ def about_me():
     now = int(time.time())
     try:
         (store_time, response) = cache["response"]
-        if now - store_time <= CACHE_TIME_SECS:
+        response_age = now - store_time
+        if response_age <= CACHE_TIME_SECS:
+            print(f"{now=} {response_age=}: returning cached about me")
             return response
     except KeyError:
         pass
 
+    print("recomputing about me stats")
     stats = AboutMeStats(
         spotify=request_spotify_top_tracks(),
         goodreads=request_goodreads_reads.local(),
