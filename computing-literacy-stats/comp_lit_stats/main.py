@@ -13,7 +13,8 @@ DB_PATH = CACHE_DIR + "/comp_lit_stats.db"
 modal_workspace_username = "thundergolfer"
 app_name = "comp-lit-stats"
 volume = modal.NetworkFileSystem.from_name(f"{app_name}-vol", create_if_missing=True)
-app = modal.App(name=app_name)
+image = modal.Image.debian_slim().pip_install("fastapi", "pydantic").add_local_python_source("datastore")
+app = modal.App(name=app_name, image=image)
 
 web_app = FastAPI()
 
@@ -69,7 +70,6 @@ def dump():
 
 
 @app.function(
-    # Web app uses datastore to confirm subscriptions and fulfil unsubscriptions.
     network_file_systems={CACHE_DIR: volume},
 )
 @modal.asgi_app()

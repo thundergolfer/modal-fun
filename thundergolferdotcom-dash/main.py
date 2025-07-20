@@ -10,11 +10,11 @@ import modal
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-bs4_image = modal.Image.debian_slim().pip_install(["beautifulsoup4"])
+image = modal.Image.debian_slim().pip_install("beautifulsoup4", "fastapi")
 app = modal.App(
     name="thundergolferdotcom-about-page",
     secrets=[modal.Secret.from_name("spotify-aboutme")],
-    image=bs4_image,
+    image=image,
 )
 cache = modal.Dict.from_name("thundergolferdotcom-about-page-cache", create_if_missing=True)
 

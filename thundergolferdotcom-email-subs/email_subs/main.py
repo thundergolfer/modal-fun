@@ -32,7 +32,7 @@ app_name = "thundergolferdotcom-email-subs"
 nfs = modal.NetworkFileSystem.from_name(f"{app_name}-vol", create_if_missing=True)
 image = modal.Image.debian_slim().pip_install_from_requirements(
     requirements_txt="./requirements.txt"
-)
+).pip_install("fastapi").add_local_python_source("email_subs.datastore", "email_subs.emailer", "email_subs.email_copy")
 app = modal.App(name=app_name, image=image)
 web_app = FastAPI()
 
